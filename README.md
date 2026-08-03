@@ -42,7 +42,7 @@ reference paper is
   expert PR did. The scalar reward is the AND of those two conditions.
 - **Why it discriminates.** The agent never sees the covering tests
   during authoring, and the workload script is executed verbatim against
-  its patch — there is no way to game the grader without genuinely
+  its patch - there is no way to game the grader without genuinely
   understanding the code path being optimized. A missing / empty patch
   scores exactly `0.0` via a size-guard in the verifier before any test
   runs.
@@ -68,7 +68,7 @@ reference paper is
 | Namespace            | UUID `6f0f1a4c-3d3a-5f7e-9a2b-4d5c6e7f8a90` · task-org prefix `swe-perf/`                                  |
 | Reference solution   | `solution/patch.diff` (the PR's expert patch)                                                             |
 | Grading harness      | Harbor envelope + per-task `tests/test.sh` (workload timing + pytest correctness gate)                    |
-| Status               | **Pilot sample delivery** — tasks migrated into Harbor envelope from the SWE-Perf–style scrape pipeline; native re-authoring through Trinity FORGE + `harbor build` is planned |
+| Status               | **Pilot sample delivery** - tasks migrated into Harbor envelope from the SWE-Perf–style scrape pipeline; native re-authoring through Trinity FORGE + `harbor build` is planned |
 
 ## Table of contents
 
@@ -109,12 +109,12 @@ reference paper is
 ## Motivation & intended use
 
 **Why this exists.** Static coding benchmarks emphasize *what* to
-fix — pass a function, close a bug, satisfy a spec. Performance
+fix - pass a function, close a bug, satisfy a spec. Performance
 engineering is the harder regime: the code already runs, the tests
 already pass, and the agent must reason about *how* to make the same
 program produce the same answer faster. As
 [SWE-fficiency (arXiv 2511.06090)](https://arxiv.org/abs/2511.06090)
-demonstrates, this is exactly where current agents underperform —
+demonstrates, this is exactly where current agents underperform -
 locating the bottleneck, reasoning across function boundaries, and
 maintaining correctness under edits.
 
@@ -136,7 +136,7 @@ uses the binary reward as the training signal.
   codebases against a hidden test suite.
 - **Ablations** on agent scaffolds, tool use, and reasoning budgets,
   holding the environment fixed.
-- **Difficulty calibration** for downstream curriculum design — target
+- **Difficulty calibration** for downstream curriculum design - target
   speedups span two orders of magnitude across the corpus
   (**1.02× → 26.92×**), and the sampled tasks exercise substantively
   different code paths (HTTP client parsing, graph algorithms, template
@@ -144,7 +144,7 @@ uses the binary reward as the training signal.
 
 **Out of scope / not designed for.**
 
-- **A leaderboard-grade benchmark as-is.** This is a *sample delivery* —
+- **A leaderboard-grade benchmark as-is.** This is a *sample delivery* -
   it ships the tasks and grader for review and integration, not a
   ranking. Difficulty is **measured, never declared**: any per-task
   hardness label must be earned by signed pilots against a frozen solver
@@ -181,7 +181,7 @@ The contract a model faces, per task, when the consumer runs it:
    an `instruction.md` that describes the workload it must speed up and
    points at the source PR for context.
 2. The model edits the checked-out code. It does **not** see the
-   covering test suite or the expert patch during authoring — only the
+   covering test suite or the expert patch during authoring - only the
    workload script (`tests/workload.py`) it must accelerate.
 3. `tests/test.sh` runs at grade time. It (a) snapshots the model's
    changes as a patch, (b) reruns the workload on the *unpatched*
@@ -214,8 +214,8 @@ is `swe-perf/`.
 
 The authoritative task list is not embedded in this README. See:
 
-- `dataset/manifest.json` — machine-readable manifest
-- `dataset/INDEX.md` — human-readable slug ↔ uuid ↔ PR table
+- `dataset/manifest.json` - machine-readable manifest
+- `dataset/INDEX.md` - human-readable slug ↔ uuid ↔ PR table
 
 Speedup targets in this pilot span **1.02× → 26.92×** (median **1.61×**).
 
@@ -251,7 +251,7 @@ kraken-samples/
 
 ### The agent's contract, inside the container
 
-- **Workspace root.** `/testbed` — a fresh clone of the source
+- **Workspace root.** `/testbed` - a fresh clone of the source
   repository at `metadata.base_commit`, tagged `harbor-base` for
   deterministic resets. The conda env `testbed` (at
   `metadata.python_version`) is auto-activated in new shells via
@@ -269,9 +269,9 @@ kraken-samples/
   - The verifier logic (`tests/test.sh`, `tests/measure.py`) or its
     reward-write path.
 - **How the agent submits.** By editing files under `/testbed`. There is
-  no hand-off ceremony — the verifier snapshots whatever the working
+  no hand-off ceremony - the verifier snapshots whatever the working
   tree contains against `harbor-base` at grade time.
-- **Reward sink.** `/logs/verifier/reward.txt` — a single line, `0` or
+- **Reward sink.** `/logs/verifier/reward.txt` - a single line, `0` or
   `1`, written by `tests/test.sh` via `tests/measure.py`. A structured
   `result.json` lands alongside with `status`, `reward`, and
   `instance_id`.
@@ -295,14 +295,14 @@ reward = 0  otherwise
 ```
 
 There is no partial credit, no gradient within a task, and no exit-code
-shortcut — the scalar is computed only from (a) the pytest exit status
+shortcut - the scalar is computed only from (a) the pytest exit status
 under the shipped `test_patch` and (b) the ratio of two `workload.py`
 runs (`Mean:` lines extracted by `measure.py`, matched via
 `r"Mean:\s*([0-9]+\.?[0-9]*(?:[eE][-+]?[0-9]+)?)"`).
 
 **Why binary rather than smooth.** Performance optimization is
 adversarial by construction: a "partly right" patch that (a) breaks a
-test or (b) misses the speedup floor is not a partial win — it is a
+test or (b) misses the speedup floor is not a partial win - it is a
 regression the maintainer would revert. Binary reward makes the reward
 match what the PR reviewer would say. Smooth reward variants (e.g. HSR
 from the SWE-fficiency paper) are supported by the parent Kraken RL
@@ -313,7 +313,7 @@ grades on the strict AND. See [Status & roadmap](#status--roadmap).
 inherits its `target_speedup` from a **merged source PR that already
 achieved that speedup**. This anchors difficulty in real engineering
 work, not an authored threshold, and means the "reward = 1" ceiling is
-provably attainable — the expert patch under `solution/patch.diff`
+provably attainable - the expert patch under `solution/patch.diff`
 reaches it by construction.
 
 ### Discrimination
@@ -339,7 +339,7 @@ Each task is constructed to separate strong from weak policies:
 
 - The covering tests are **withheld from the agent** and injected only
   at grade time via `test_patch.diff`. The agent cannot fit-to-tests.
-- The workload script is **executed verbatim** — no proxy metric, no
+- The workload script is **executed verbatim** - no proxy metric, no
   self-report. The grader times an actual invocation of
   `workload.py`.
 - The **baseline is re-timed on the same container** as the optimized
@@ -347,7 +347,7 @@ Each task is constructed to separate strong from weak policies:
   ratio is not confounded by host-level noise between different image
   builds.
 - The size-guard rejects **no-op / whitespace-only** submissions at 0
-  bytes before pytest is even invoked — a pass-through submission
+  bytes before pytest is even invoked - a pass-through submission
   cannot accidentally score `1` on a trivially cached workload.
 
 ---
@@ -385,9 +385,9 @@ to `/logs/verifier/reward.txt` and per-run detail to
 7. **Always exit `0`.** The reward file is the grading channel, not the
    shell exit code.
 
-The `test_patch` layering — copied into the image at
+The `test_patch` layering - copied into the image at
 `/opt/harbor/test_patch.diff` but applied by `test.sh` at eval time,
-never baked into git — is deliberate: covering-test patches from real
+never baked into git - is deliberate: covering-test patches from real
 PRs are whitespace-fragile, and applying them at eval time lets the
 tests be revised (or re-scraped) without invalidating the container
 build cache.
@@ -469,8 +469,8 @@ This is a **pilot sample delivery**. State the sharp edges plainly:
   task. This delivery does **not** claim per-task uniform difficulty.
 - **Difficulty is not yet measured.** No pilot rewards are reported in
   this delivery. A calibration pass across a candidate model and a
-  weaker calibration model — following the raiden-samples pattern of
-  a pass@1 sweep with `reward.txt` per run — is planned before the
+  weaker calibration model - following the raiden-samples pattern of
+  a pass@1 sweep with `reward.txt` per run - is planned before the
   first labeled release.
 - **Migration path.** The delivery target is the same task set (or a curated
   successor set) re-emitted through:
@@ -535,20 +535,20 @@ storage_mb        = 20000
 
 Fields with load-bearing semantics:
 
-- `[metadata].instance_id` — SWE-Perf-style `<owner>__<repo>-<pr>` slug,
+- `[metadata].instance_id` - SWE-Perf-style `<owner>__<repo>-<pr>` slug,
   and the directory name under `dataset/`.
-- `[metadata].uuid` — deterministic UUIDv5 under the namespace
+- `[metadata].uuid` - deterministic UUIDv5 under the namespace
   `6f0f1a4c-3d3a-5f7e-9a2b-4d5c6e7f8a90`, so `dataset/by-uuid/<uuid>`
   resolves via symlink to the slug directory.
-- `[metadata].base_commit` — the source commit the container clones
+- `[metadata].base_commit` - the source commit the container clones
   and tags `harbor-base`.
-- `[metadata].target_speedup` — the number the verifier compares
+- `[metadata].target_speedup` - the number the verifier compares
   `baseline_mean / optimized_mean` against.
-- `[metadata].python_version` — the exact runtime the conda
+- `[metadata].python_version` - the exact runtime the conda
   `testbed` env is created at.
-- `[metadata].difficulty` — **advisory only** in this delivery; not yet
+- `[metadata].difficulty` - **advisory only** in this delivery; not yet
   backed by signed pilots.
-- `[environment]` — resource / timeout envelope the runner enforces.
+- `[environment]` - resource / timeout envelope the runner enforces.
 
 ---
 
@@ -563,7 +563,7 @@ TASK=dataset/<slug>    # pick any slug listed in dataset/INDEX.md
 # 1. Build the task image from the per-task Dockerfile.
 docker build -t kraken-samples:$(basename "$TASK") "$TASK/environment/"
 
-# 2. Run the oracle path — apply the reference patch, run the verifier,
+# 2. Run the oracle path - apply the reference patch, run the verifier,
 #    print the reward.
 docker run --rm \
   -v "$PWD/$TASK/tests:/tests:ro" \
@@ -602,19 +602,19 @@ verdict near the target.
 **What is build-time reproducible.** The image is built in three tiers
 by design:
 
-- **Tier 1** — `ubuntu:22.04` + apt bundle (`gfortran`, `libopenblas-dev`,
+- **Tier 1** - `ubuntu:22.04` + apt bundle (`gfortran`, `libopenblas-dev`,
   `libblas-dev`, `liblapack-dev`, `libffi-dev`, `libssl-dev`,
   `libtiff-dev`, `zlib1g-dev`, tzdata, locales) + Miniconda py3.11.
   Byte-identical across every task in the delivery, so the Docker layer
   cache reuses it after the first build.
-- **Tier 2** — `setup_env.sh` creates conda env `testbed` at
+- **Tier 2** - `setup_env.sh` creates conda env `testbed` at
   `metadata.python_version`, then installs shared pip deps
   (`pytest`, plus any per-repo overrides).
-- **Tier 3** — `setup_repo.sh` clones the source repo at
+- **Tier 3** - `setup_repo.sh` clones the source repo at
   `metadata.base_commit`, runs the per-repo install command, pip-freezes
   the state, and `git tag harbor-base` for reset invariance. The PR's
   `test_patch.diff` is `COPY`d into the image at
-  `/opt/harbor/test_patch.diff` but **not applied** at build time —
+  `/opt/harbor/test_patch.diff` but **not applied** at build time -
   application is deferred to the verifier.
 
 **Pins that are not yet at parity with the raiden-samples posture.** This
@@ -633,7 +633,7 @@ repository the consumer cloned.
 
 ## Versioning, licensing & citation
 
-**Versioning.** This is the **Kraken Samples pilot delivery** — tasks
+**Versioning.** This is the **Kraken Samples pilot delivery** - tasks
 derived from merged source PRs across the sampled repositories.
 Task identity is the tuple `(slug, uuid, base_commit)` in `task.toml`;
 the in-repository task identity is the git commit of this repository
@@ -645,7 +645,7 @@ When reporting results, cite the git commit + the per-task
 repository root. Source repository code that the container clones
 at grade time retains its respective license and is *not*
 redistributed by this
-repository — it is fetched at image build time via `setup_repo.sh`.
+repository - it is fetched at image build time via `setup_repo.sh`.
 
 **Citation.** When reporting results computed against this delivery,
 identify (a) the task set (`Kraken Samples pilot`),
@@ -685,7 +685,7 @@ The parent Kraken RL environment:
 1. **Why real PRs, not synthetic workloads.** Every task is anchored in
    a *merged* source PR that measurably sped something up. The
    `target_speedup` is therefore a number a human maintainer already
-   hit, on real code, that a real reviewer accepted — not an authored
+   hit, on real code, that a real reviewer accepted - not an authored
    threshold. This is the anti-gaming property that matters most: the
    ceiling is provably reachable, and by an edit the community
    endorsed.
@@ -697,8 +697,8 @@ The parent Kraken RL environment:
    `--ignore-space-change` fallback and, on hard failure, writes a
    diagnostic `status=test_patch_failed_*` so the failure mode is
    triage-visible instead of silent.
-3. **Why `git tag harbor-base`.** Every reset — baseline pass and
-   optimized pass — resets to the same tag, so the two runs start from
+3. **Why `git tag harbor-base`.** Every reset - baseline pass and
+   optimized pass - resets to the same tag, so the two runs start from
    byte-identical trees. Combined with `git clean -fdx` (preserving
    `.venv` and `*.egg-info` to avoid reinstalls), this makes the ratio
    `BASELINE_MEAN / OPTIMIZED_MEAN` a clean function of the agent's
@@ -723,7 +723,7 @@ The parent Kraken RL environment:
    measure.py}` + `solution/{patch.diff, solve.sh}` + `task.toml`) is
    uniform across all tasks, generated from a single parametrized
    scrape recipe. The same layout generalizes to any SWE-Perf–style
-   JSONL row for any target repository — the Trinity FORGE + `harbor
+   JSONL row for any target repository - the Trinity FORGE + `harbor
    build` migration replaces the *authoring* step, not the *envelope*.
 
 ---
