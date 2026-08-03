@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/banner.png" alt="Kraken · repository-level performance optimization RL environment" style="width: 100%; height: auto;" />
+<img src="images/hero.png" alt="Kraken · repository-level performance optimization RL environment" style="width: 100%; height: auto;" />
 </div>
 
 > **Agentic-coding RL environment · Harbor-format tasks ·
