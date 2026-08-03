@@ -1,0 +1,14 @@
+{
+  "recipe": "swefficiency.task_uuid.v1",
+  "namespace": "94422beb-6dac-56ff-8500-bfa6b695ff19",
+  "canonical_content_hash": "c84a2368416ddd7ac81c3df7cabf900193002f04933d80215a3688e5ea70425e",
+  "bundle_uuid": "d9358407-bdba-50a8-a473-f111aed43052",
+  "canonical_material": {
+    "instance_id": "networkx__networkx-8615",
+    "repo": "networkx/networkx",
+    "base_commit": "05809740ff46c1bd03998bcef1d7686444048371",
+    "pull_number": 8615
+  },
+  "canonical_hash_construction": "sha256 over canonical JSON of the `canonical_material` dict (sort_keys=True, separators=(',',':'), ensure_ascii=True). bundle_uuid = uuid5(namespace, canonical_content_hash).",
+  "source_slug": "networkx__networkx-8615"
+}

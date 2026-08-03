@@ -1,0 +1,34 @@
+diff --git a/networkx/algorithms/tree/mst.py b/networkx/algorithms/tree/mst.py
+index 83402ec8df5..0163dcac6c1 100644
+--- a/networkx/algorithms/tree/mst.py
++++ b/networkx/algorithms/tree/mst.py
+@@ -228,6 +228,9 @@ def kruskal_mst_edges(
+     sorted_edges = included_edges
+     del open_edges, sorted_open_edges, included_edges
+ 
++    edges_needed = len(G) - 1
++    edges_added = 0
++
+     # Multigraphs need to handle edge keys in addition to edge data.
+     if G.is_multigraph():
+         for wt, u, v, k, d in sorted_edges:
+@@ -243,6 +246,9 @@ def kruskal_mst_edges(
+                     else:
+                         yield u, v
+                 subtrees.union(u, v)
++                edges_added += 1
++                if edges_added == edges_needed:
++                    return
+     else:
+         for wt, u, v, d in sorted_edges:
+             if subtrees[u] != subtrees[v]:
+@@ -251,6 +257,9 @@ def kruskal_mst_edges(
+                 else:
+                     yield u, v
+                 subtrees.union(u, v)
++                edges_added += 1
++                if edges_added == edges_needed:
++                    return
+ 
+ 
+ @nx._dispatchable(edge_attrs="weight", preserve_edge_attrs="data")

@@ -1,0 +1,31 @@
+version = "1.0"
+
+[task]
+name = "swe-perf/networkx__networkx-8296"
+
+[metadata]
+bundle_uuid = "4a422020-1f29-57b5-8ed5-7229b0869e45"
+instance_id = "networkx__networkx-8296"
+repo = "networkx/networkx"
+base_commit = "6dbed05b693d535f70495229c3adc364793b00ed"
+version = "3.4"
+pull_number = 8296
+pr_url = "https://github.com/networkx/networkx/pull/8296"
+target_speedup = 1.2
+python_version = "3.12"
+difficulty = "hard"
+category = "performance_optimization"
+tags = ["optimization", "python", "sweperf"]
+
+[verifier]
+timeout_sec = 3600
+
+[agent]
+timeout_sec = 10800
+
+[environment]
+build_timeout_sec = 3600
+cpus = 4
+gpus = 0
+memory_mb = 8192
+storage_mb = 20000

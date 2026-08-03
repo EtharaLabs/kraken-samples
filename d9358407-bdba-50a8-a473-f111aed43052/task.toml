@@ -1,0 +1,31 @@
+version = "1.0"
+
+[task]
+name = "swe-perf/networkx__networkx-8615"
+
+[metadata]
+bundle_uuid = "d9358407-bdba-50a8-a473-f111aed43052"
+instance_id = "networkx__networkx-8615"
+repo = "networkx/networkx"
+base_commit = "05809740ff46c1bd03998bcef1d7686444048371"
+version = "3.4"
+pull_number = 8615
+pr_url = "https://github.com/networkx/networkx/pull/8615"
+target_speedup = 4.04
+python_version = "3.12"
+difficulty = "hard"
+category = "performance_optimization"
+tags = ["optimization", "python", "sweperf"]
+
+[verifier]
+timeout_sec = 3600
+
+[agent]
+timeout_sec = 10800
+
+[environment]
+build_timeout_sec = 3600
+cpus = 4
+gpus = 0
+memory_mb = 8192
+storage_mb = 20000

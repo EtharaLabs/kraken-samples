@@ -4,7 +4,7 @@
 </div>
 
 > **Agentic-coding RL environment · Harbor-format tasks ·
-> real GitHub PR–grounded workloads · binary reward in `{0, 1}` gated by
+> real GitHub PR-grounded workloads · binary reward in `{0, 1}` gated by
 > correctness *and* measured speedup**
 
 ![scope](https://img.shields.io/badge/scope-repo--level_perf_optimization-blue)
@@ -17,7 +17,7 @@ Delivery of the **Kraken** RL training set: containerized
 agentic performance engineering on **real repository code, at real
 commits, against real workloads**.
 
-This sample covers the **SWE-Perf–grounded scope**: tasks that
+This sample covers the **SWE-Perf-grounded scope**: tasks that
 ask a coding agent to *optimize the runtime of a targeted workload*
 inside a full checkout of a real repository at a pinned version,
 without breaking the covering test suite the maintainers wrote
@@ -59,8 +59,9 @@ reference paper is
 
 | Field                | Value                                                                                                     |
 | -------------------- | --------------------------------------------------------------------------------------------------------- |
-| Domain               | Repository-level performance optimization (SWE-Perf–style)                                                |
+| Domain               | Repository-level performance optimization (SWE-Perf-style)                                                |
 | Format               | [Harbor](https://github.com/harbor-framework/harbor) containerized tasks                                  |
+| Tasks in delivery    | **5 sample tasks** (see `dataset/INDEX.md` for the authoritative list)                                    |
 | Target speedup range | **1.02× → 26.92×** (median **1.61×**)                                                                     |
 | Runtime versions     | pinned per task in `task.toml` (see task inventory)                                                       |
 | Reward               | `1` iff (covering tests pass) ∧ (measured_speedup ≥ target_speedup); else `0`. Written to `/logs/verifier/reward.txt` |
@@ -68,7 +69,7 @@ reference paper is
 | Namespace            | UUID `6f0f1a4c-3d3a-5f7e-9a2b-4d5c6e7f8a90` · task-org prefix `swe-perf/`                                  |
 | Reference solution   | `solution/patch.diff` (the PR's expert patch)                                                             |
 | Grading harness      | Harbor envelope + per-task `tests/test.sh` (workload timing + pytest correctness gate)                    |
-| Status               | **Pilot sample delivery** - tasks migrated into Harbor envelope from the SWE-Perf–style scrape pipeline; native re-authoring through Trinity FORGE + `harbor build` is planned |
+| Status               | **Pilot sample delivery** - tasks migrated into Harbor envelope from the SWE-Perf-style scrape pipeline; native re-authoring through Trinity FORGE + `harbor build` is planned |
 
 ## Table of contents
 
@@ -212,7 +213,7 @@ is `swe-perf/`.
 
 ### Task list
 
-The authoritative task list is not embedded in this README. See:
+This pilot ships **5 sample tasks**. The authoritative task list is not embedded in this README. See:
 
 - `dataset/manifest.json` - machine-readable manifest
 - `dataset/INDEX.md` - human-readable slug ↔ uuid ↔ PR table
@@ -447,7 +448,7 @@ Every task in this delivery satisfies, or is designed to satisfy:
 
 This is a **pilot sample delivery**. State the sharp edges plainly:
 
-- **Origin.** The tasks were emitted by the SWE-Perf–style scrape
+- **Origin.** The tasks were emitted by the SWE-Perf-style scrape
   pipeline in
   [`Ethara-Ai/kraken-harness`](https://github.com/Ethara-Ai/kraken-harness)
   (`generate_harbor_tasks.py`), which reads SWE-Perf JSONL rows
@@ -722,7 +723,7 @@ The parent Kraken RL environment:
    setup_repo.sh, test_patch.diff}` + `tests/{test.sh, workload.py,
    measure.py}` + `solution/{patch.diff, solve.sh}` + `task.toml`) is
    uniform across all tasks, generated from a single parametrized
-   scrape recipe. The same layout generalizes to any SWE-Perf–style
+   scrape recipe. The same layout generalizes to any SWE-Perf-style
    JSONL row for any target repository - the Trinity FORGE + `harbor
    build` migration replaces the *authoring* step, not the *envelope*.
 
