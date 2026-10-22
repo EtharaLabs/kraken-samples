@@ -2,9 +2,9 @@
 
 # Project: samples
 
-<p align="center"><b>The samples lane: 5 of 30 Harbor task bundles.</b></p>
+<p align="center"><b>The samples lane: 0 of 30 Harbor task bundles.</b></p>
 
-<p align="center"><a href="#summary"><img src="https://img.shields.io/badge/bundles-5_of_30-845EF7" alt="bundles: 5 of 30"></a> <a href="#evidence-status"><img src="https://img.shields.io/badge/sealed-0-845EF7" alt="sealed: 0"></a> <a href="#difficulty-tiers"><img src="https://img.shields.io/badge/difficulty-measured-845EF7" alt="difficulty: measured"></a></p>
+<p align="center"><a href="#summary"><img src="https://img.shields.io/badge/bundles-0_of_30-845EF7" alt="bundles: 0 of 30"></a> <a href="#evidence-status"><img src="https://img.shields.io/badge/sealed-0-845EF7" alt="sealed: 0"></a> <a href="#difficulty-tiers"><img src="https://img.shields.io/badge/difficulty-measured-845EF7" alt="difficulty: measured"></a></p>
 
 <p align="center"><sub><a href="#abstract">Abstract</a> | <a href="#summary">Summary</a> | <a href="#difficulty-tiers">Difficulty tiers</a> | <a href="#evidence-status">Evidence status</a> | <a href="#coverage">Coverage</a> | <a href="#dataset-structure">Dataset structure</a> | <a href="#verification-and-quality-assurance">Verification and quality assurance</a> | <a href="#reproduction">Reproduction</a> | <a href="#cite">Cite</a> | <a href="#license">License</a> | <a href="#contact">Contact</a></sub></p>
 
@@ -18,11 +18,11 @@ Each bundle is one Harbor task in a directory named by its content-derived uuid5
 
 | Property | Value |
 | --- | --- |
-| Bundles | 5 of 30 |
-| Sealed | 0 of 5 |
-| Registrations | unregistered (5) |
-| Audit verdicts | none (5) |
-| Harbor schema | absent (5) |
+| Bundles | 0 of 30 |
+| Sealed | 0 of 0 |
+| Registrations | none |
+| Audit verdicts | none |
+| Harbor schema | none |
 
 ## Difficulty tiers
 
@@ -32,49 +32,19 @@ Difficulty is measured by the signed pilot alone and never declared in a bundle,
 
 The verdict is the audit outcome recorded at the sealed digest, and `none` means no verdict has landed for that digest yet. Only an authoring run removes a bundle from this lane, so removal waits for the next one.
 
-| uuid | Verdict | Sealed digest | Stream |
-| --- | --- | --- | --- |
-| 2e9347cf-a1c9-596f-8a35-4f52a3d1be12 | none | absent | none |
-| 4a422020-1f29-57b5-8ed5-7229b0869e45 | none | absent | none |
-| a4d65ca3-131e-5925-aa6b-0da8634389ca | none | absent | none |
-| c02572c7-f19f-5fbb-a388-148fff09d488 | none | absent | none |
-| d9358407-bdba-50a8-a473-f111aed43052 | none | absent | none |
-
 ## Coverage
 
-| Keyword | Bundles |
-| --- | --- |
-| optimization | 5 |
-| python | 5 |
-| sweperf | 5 |
+No resident bundle declares a keyword.
 
 ## Dataset structure
 
-| Bundle | Task | Keywords | Registration | Sealed at | Tier |
-| --- | --- | --- | --- | --- | --- |
-| [`2e9347cf-a1c9-596f-8a35-4f52a3d1be12`](2e9347cf-a1c9-596f-8a35-4f52a3d1be12/) | `swe-perf/pallets__jinja-1516` | optimization, python, sweperf | unregistered | unsealed | - |
-| [`4a422020-1f29-57b5-8ed5-7229b0869e45`](4a422020-1f29-57b5-8ed5-7229b0869e45/) | `swe-perf/networkx__networkx-8296` | optimization, python, sweperf | unregistered | unsealed | - |
-| [`a4d65ca3-131e-5925-aa6b-0da8634389ca`](a4d65ca3-131e-5925-aa6b-0da8634389ca/) | `swe-perf/networkx__networkx-7971` | optimization, python, sweperf | unregistered | unsealed | - |
-| [`c02572c7-f19f-5fbb-a388-148fff09d488`](c02572c7-f19f-5fbb-a388-148fff09d488/) | `swe-perf/networkx__networkx-6337` | optimization, python, sweperf | unregistered | unsealed | - |
-| [`d9358407-bdba-50a8-a473-f111aed43052`](d9358407-bdba-50a8-a473-f111aed43052/) | `swe-perf/networkx__networkx-8615` | optimization, python, sweperf | unregistered | unsealed | - |
-
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#131a33","primaryTextColor":"#e8ecff","primaryBorderColor":"#845EF7","lineColor":"#22d3ee","fontFamily":"monospace"}}}%%
-flowchart LR
-    bundle["&lt;uuid&gt;/"]
-    bundle --> n0["task.toml<br/>runner manifest"]
-    bundle --> n1["instruction.md<br/>objective the agent reads"]
-    bundle --> n2["environment/<br/>agent sandbox image"]
-    bundle --> n3["tests/<br/>verifier, hidden from the agent"]
-    bundle --> n4["solution/<br/>private oracle"]
-    bundle --> n5["uuid_provenance.json"]
-```
+No bundle is resident under `samples/`.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"primaryColor":"#131a33","primaryTextColor":"#e8ecff","primaryBorderColor":"#845EF7","lineColor":"#22d3ee","fontFamily":"monospace"}}}%%
 flowchart LR
     staging["staging/"]
-    staging --> samples["samples/<br/>5 of 30"]
+    staging --> samples["samples/<br/>0 of 30"]
     samples --> delivery["delivery/<br/>0 of 10000"]
     delivery --> stock["stock/<br/>0 of 10000"]
 ```
