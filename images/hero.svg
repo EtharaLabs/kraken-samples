@@ -1,1 +1,266 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240"><rect width="720" height="240" fill="#845EF7"/><text x="360" y="135" font-family="sans-serif" font-size="56" fill="#FFFFFF" text-anchor="middle">kraken</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="480" viewBox="0 0 1440 480" role="img" aria-labelledby="t d">
+  <title id="t">Kraken: measured never claimed, charted never guessed</title>
+  <desc id="d">The Kraken Cartographer, a female kraken navigator in a braided-epaulet coat, holds a brass chronometer and a compass rose above a drowned city of repository spires. A sea chart, flame-graph coral, and test shells lie on the seabed. Three attendants keep watch: an archive lantern, a forge anvil, and an assay balance.</desc>
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#021314"/>
+      <stop offset="0.45" stop-color="#05302f"/>
+      <stop offset="1" stop-color="#0a4644"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.12" cy="-0.1" r="0.9">
+      <stop offset="0" stop-color="#f4d58d" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#b58f47" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#b58f47" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.75">
+      <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.65"/>
+    </radialGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5fb3a8"/>
+      <stop offset="0.45" stop-color="#2c7d78"/>
+      <stop offset="1" stop-color="#0f3f42"/>
+    </linearGradient>
+    <linearGradient id="tentacle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4aa197"/>
+      <stop offset="1" stop-color="#14504f"/>
+    </linearGradient>
+    <linearGradient id="coat" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d4d63"/>
+      <stop offset="0.6" stop-color="#11303f"/>
+      <stop offset="1" stop-color="#081c25"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbe3a1"/>
+      <stop offset="0.4" stop-color="#d4a556"/>
+      <stop offset="1" stop-color="#7a5a24"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0c2"/>
+      <stop offset="0.55" stop-color="#d9ab5c"/>
+      <stop offset="1" stop-color="#8a6428"/>
+    </linearGradient>
+    <linearGradient id="parchment" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c9b88a"/>
+      <stop offset="1" stop-color="#7d7255"/>
+    </linearGradient>
+    <linearGradient id="ray" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4d58d" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f4d58d" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff3c4"/>
+      <stop offset="0.4" stop-color="#f2c25b" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#f2c25b" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="far" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.9  0 0 0 0 0.85  0 0 0 0 0.7  0 0 0 0.55 0"/>
+    </filter>
+    <filter id="brush" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="3" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="6"/>
+    </filter>
+  </defs>
+
+  <!-- water and directional light from the upper left -->
+  <rect width="1440" height="480" fill="url(#sea)"/>
+  <rect width="1440" height="480" fill="url(#sun)"/>
+  <g filter="url(#soft)" opacity="0.9">
+    <polygon points="40,0 170,0 520,480 330,480" fill="url(#ray)"/>
+    <polygon points="230,0 300,0 760,480 640,480" fill="url(#ray)" opacity="0.7"/>
+    <polygon points="420,0 470,0 1010,480 930,480" fill="url(#ray)" opacity="0.45"/>
+  </g>
+
+  <!-- far layer: drowned city of repository spires -->
+  <g filter="url(#far)" opacity="0.5" fill="#0c3a3a">
+    <path d="M700 480 V300 l22 -40 22 40 V480 Z"/>
+    <path d="M760 480 V250 h46 V480 Z"/>
+    <path d="M820 480 V320 l30 -70 30 70 V480 Z"/>
+    <path d="M900 480 V280 h38 v-30 h14 v30 h10 V480 Z"/>
+    <path d="M980 480 V230 l18 -50 18 50 V480 Z"/>
+    <path d="M1030 480 V300 h60 V480 Z"/>
+    <path d="M1110 480 V260 l26 -60 26 60 V480 Z"/>
+    <path d="M1180 480 V310 h44 V480 Z"/>
+    <path d="M1240 480 V240 l20 -46 20 46 V480 Z"/>
+    <path d="M1300 480 V290 h56 V480 Z"/>
+    <path d="M1370 480 V330 l24 -50 24 50 V480 Z"/>
+    <path d="M20 480 V330 h36 V480 Z"/>
+    <path d="M70 480 V290 l16 -40 16 40 V480 Z"/>
+  </g>
+  <g opacity="0.35" fill="#e7c67a" filter="url(#far)">
+    <rect x="772" y="270" width="6" height="8"/><rect x="788" y="300" width="6" height="8"/>
+    <rect x="912" y="300" width="6" height="8"/><rect x="1046" y="320" width="6" height="8"/>
+    <rect x="1064" y="350" width="6" height="8"/><rect x="1196" y="330" width="6" height="8"/>
+    <rect x="1316" y="310" width="6" height="8"/><rect x="1332" y="345" width="6" height="8"/>
+  </g>
+
+  <!-- seabed -->
+  <path d="M0 430 C 200 405 380 440 620 420 C 860 400 1100 440 1440 415 V480 H0 Z" fill="#072a2a"/>
+  <path d="M0 455 C 260 440 520 470 800 452 C 1080 436 1260 465 1440 450 V480 H0 Z" fill="#041d1d"/>
+
+  <!-- sea chart unrolled on the seabed -->
+  <g transform="translate(70 392) rotate(-4)" filter="url(#brush)">
+    <rect x="0" y="0" width="270" height="62" rx="4" fill="url(#parchment)" opacity="0.85"/>
+    <path d="M20 40 C 60 10 110 50 150 22 C 190 0 230 30 255 18" fill="none" stroke="#4d4433" stroke-width="1.4"/>
+    <path d="M18 50 C 70 28 120 60 170 36 C 210 18 240 44 258 34" fill="none" stroke="#4d4433" stroke-width="1" opacity="0.7"/>
+    <path d="M30 18 L 70 30 L 110 20 L 150 38 L 200 26" fill="none" stroke="#7a2e1d" stroke-width="2" stroke-dasharray="5 5"/>
+    <path d="M196 20 l10 10 M206 20 l-10 10" stroke="#7a2e1d" stroke-width="2.4"/>
+    <circle cx="238" cy="44" r="10" fill="none" stroke="#4d4433" stroke-width="1"/>
+    <path d="M238 32 v24 M226 44 h24" stroke="#4d4433" stroke-width="1"/>
+  </g>
+
+  <!-- flame-graph coral -->
+  <g opacity="0.85" filter="url(#brush)">
+    <rect x="620" y="440" width="150" height="14" fill="#a8562b"/>
+    <rect x="626" y="426" width="96" height="14" fill="#c46d32"/>
+    <rect x="726" y="426" width="38" height="14" fill="#b8642e"/>
+    <rect x="632" y="412" width="58" height="14" fill="#d98a3d"/>
+    <rect x="694" y="412" width="24" height="14" fill="#cf7c38"/>
+    <rect x="638" y="398" width="30" height="14" fill="#e8a54a"/>
+    <rect x="642" y="384" width="16" height="14" fill="#f2c25b"/>
+  </g>
+
+  <!-- test shells with checks -->
+  <g>
+    <path d="M360 462 q 22 -34 44 0 z" fill="#d8ccb0" opacity="0.85"/>
+    <path d="M371 452 l6 6 l12 -14" fill="none" stroke="#2f6b3d" stroke-width="3"/>
+    <path d="M540 466 q 20 -30 40 0 z" fill="#cfc2a4" opacity="0.8"/>
+    <path d="M550 457 l5 5 l11 -12" fill="none" stroke="#2f6b3d" stroke-width="3"/>
+  </g>
+
+  <!-- the Kraken Cartographer -->
+  <g id="kraken">
+    <!-- lower tentacles -->
+    <g fill="none" stroke="url(#tentacle)" stroke-linecap="round">
+      <path d="M380 350 C 330 390 300 420 250 430 C 215 437 200 420 214 408" stroke-width="18"/>
+      <path d="M405 360 C 390 410 360 440 330 462" stroke-width="16"/>
+      <path d="M440 362 C 445 410 470 440 505 462" stroke-width="16"/>
+      <path d="M470 352 C 520 380 560 410 600 412 C 630 414 640 396 624 386" stroke-width="18"/>
+      <path d="M425 365 C 425 410 420 440 425 470" stroke-width="14"/>
+    </g>
+    <g fill="#9fd3c8" opacity="0.55">
+      <circle cx="262" cy="426" r="3"/><circle cx="240" cy="429" r="2.6"/><circle cx="222" cy="422" r="2.2"/>
+      <circle cx="580" cy="408" r="3"/><circle cx="604" cy="410" r="2.6"/><circle cx="622" cy="400" r="2.2"/>
+    </g>
+    <!-- raised tentacle with the chronometer -->
+    <path d="M385 250 C 330 230 300 200 262 186" fill="none" stroke="url(#tentacle)" stroke-width="17" stroke-linecap="round"/>
+    <g transform="translate(236 168)" filter="url(#glow)">
+      <circle r="38" fill="url(#brass)"/>
+      <circle r="30" fill="#f3ead2"/>
+      <g stroke="#3a2f1c" stroke-width="2">
+        <path d="M0 -27 V-21"/><path d="M27 0 H21"/><path d="M0 27 V21"/><path d="M-27 0 H-21"/>
+        <path d="M19 -19 l-4 4"/><path d="M19 19 l-4 -4"/><path d="M-19 19 l4 -4"/><path d="M-19 -19 l4 4"/>
+      </g>
+      <path d="M0 0 L0 -20" stroke="#3a2f1c" stroke-width="3" stroke-linecap="round"/>
+      <path d="M0 0 L13 6" stroke="#7a2e1d" stroke-width="2.4" stroke-linecap="round"/>
+      <circle r="3" fill="#3a2f1c"/>
+      <rect x="-6" y="-48" width="12" height="11" rx="3" fill="url(#brass)"/>
+    </g>
+    <!-- raised tentacle with the compass rose -->
+    <path d="M478 252 C 530 236 560 210 592 196" fill="none" stroke="url(#tentacle)" stroke-width="17" stroke-linecap="round"/>
+    <g transform="translate(618 182)" filter="url(#glow)">
+      <circle r="40" fill="#0e2b30" stroke="url(#brass)" stroke-width="5"/>
+      <polygon points="0,-34 7,-7 34,0 7,7 0,34 -7,7 -34,0 -7,-7" fill="url(#brass)"/>
+      <polygon points="0,-34 7,-7 0,0" fill="#fff0c2"/>
+      <polygon points="34,0 7,7 0,0" fill="#fff0c2"/>
+      <polygon points="-20,-20 3,-3 -3,3" fill="#d4a556" opacity="0.7"/>
+      <polygon points="20,20 -3,3 3,-3" fill="#d4a556" opacity="0.7"/>
+      <circle r="4" fill="#7a2e1d"/>
+    </g>
+    <!-- navigator's coat -->
+    <path d="M378 190 C 360 240 350 300 362 362 L 494 362 C 506 300 498 240 484 188 C 452 204 410 204 378 190 Z" fill="url(#coat)"/>
+    <path d="M410 200 L 430 300 L 450 200" fill="none" stroke="#2f6f86" stroke-width="5"/>
+    <path d="M378 190 C 395 230 405 260 412 300" fill="none" stroke="#3d86a0" stroke-width="2" opacity="0.6"/>
+    <g fill="url(#brass)">
+      <circle cx="430" cy="312" r="5"/><circle cx="430" cy="332" r="5"/><circle cx="430" cy="352" r="5"/>
+    </g>
+    <!-- braided epaulets -->
+    <g>
+      <ellipse cx="380" cy="198" rx="26" ry="11" fill="url(#brass)"/>
+      <ellipse cx="482" cy="196" rx="26" ry="11" fill="url(#brass)"/>
+      <g stroke="#d4a556" stroke-width="2.4" stroke-linecap="round">
+        <path d="M360 205 v14"/><path d="M368 208 v16"/><path d="M376 209 v16"/><path d="M384 209 v16"/><path d="M392 208 v15"/><path d="M400 205 v13"/>
+        <path d="M462 203 v13"/><path d="M470 206 v15"/><path d="M478 207 v16"/><path d="M486 207 v16"/><path d="M494 206 v15"/><path d="M502 203 v13"/>
+      </g>
+    </g>
+    <!-- mantle and face, lit from the upper left -->
+    <path d="M384 192 C 362 128 384 60 430 54 C 478 48 500 116 480 190 C 452 202 412 204 384 192 Z" fill="url(#skin)"/>
+    <path d="M398 86 C 410 66 432 60 452 66" fill="none" stroke="#bfe8de" stroke-width="5" stroke-linecap="round" opacity="0.5"/>
+    <g fill="#bfe8de" opacity="0.25">
+      <circle cx="410" cy="110" r="5"/><circle cx="452" cy="100" r="4"/><circle cx="430" cy="128" r="3.5"/>
+    </g>
+    <g filter="url(#glow)">
+      <path d="M396 160 q 14 -12 28 0 q -14 10 -28 0 z" fill="#f2c25b"/>
+      <path d="M438 158 q 14 -12 28 0 q -14 10 -28 0 z" fill="#f2c25b"/>
+    </g>
+    <ellipse cx="410" cy="160" rx="4" ry="5" fill="#1a1206"/>
+    <ellipse cx="452" cy="158" rx="4" ry="5" fill="#1a1206"/>
+    <path d="M418 180 q 12 6 24 0" fill="none" stroke="#0f3f42" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M398 62 l 8 -14 l 10 10 l 14 -16 l 14 16 l 10 -10 l 8 14 z" fill="url(#brass)" opacity="0.9"/>
+  </g>
+
+  <!-- three attendants on the seabed: archive lantern, forge anvil, assay balance -->
+  <g id="attendants">
+    <g transform="translate(905 352)">
+      <circle cx="0" cy="18" r="46" fill="url(#lamp)" opacity="0.6"/>
+      <path d="M0 -40 V-18" stroke="#8a6428" stroke-width="3"/>
+      <path d="M-14 -18 h28 l-4 8 h-20 z" fill="url(#brass)"/>
+      <rect x="-12" y="-10" width="24" height="38" rx="5" fill="#f6d987" opacity="0.9"/>
+      <path d="M-12 -10 v38 M12 -10 v38 M0 -10 v38" stroke="#8a6428" stroke-width="2"/>
+      <path d="M-16 28 h32 l-4 8 h-24 z" fill="url(#brass)"/>
+      <path d="M-4 36 V74" stroke="#5a4a2a" stroke-width="5"/>
+    </g>
+    <g transform="translate(1045 404)">
+      <path d="M-46 0 h70 c 8 0 18 -4 22 -10 c -4 14 -16 20 -28 20 h-6 v14 h14 v10 h-60 v-10 h14 v-14 h-26 z" fill="#2b3f44" stroke="#5f8790" stroke-width="2"/>
+      <path d="M-10 -34 l 30 -10 l 4 12 l -30 10 z" fill="url(#brass)"/>
+      <path d="M2 -34 l -10 32" stroke="#6b4c22" stroke-width="5" stroke-linecap="round"/>
+      <g fill="#f2c25b" filter="url(#glow)">
+        <circle cx="-22" cy="-12" r="2.4"/><circle cx="-30" cy="-22" r="1.8"/><circle cx="-14" cy="-26" r="1.6"/><circle cx="18" cy="-12" r="2"/>
+      </g>
+    </g>
+    <g transform="translate(1185 360)">
+      <path d="M0 -36 V60" stroke="url(#brass)" stroke-width="5"/>
+      <path d="M-22 64 h44" stroke="url(#brass)" stroke-width="7" stroke-linecap="round"/>
+      <path d="M-48 -26 L48 -34" stroke="url(#brass)" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="0" cy="-36" r="6" fill="url(#brass)"/>
+      <path d="M-48 -26 l-16 34 M-48 -26 l16 34" stroke="#a88442" stroke-width="1.5"/>
+      <path d="M48 -34 l-16 34 M48 -34 l16 34" stroke="#a88442" stroke-width="1.5"/>
+      <path d="M-68 8 q 20 16 40 0 z" fill="url(#brass)"/>
+      <path d="M28 0 q 20 16 40 0 z" fill="url(#brass)"/>
+    </g>
+  </g>
+
+  <!-- project name and tagline -->
+  <g text-anchor="middle">
+    <text x="1060" y="190" font-family="Georgia, 'Times New Roman', serif" font-size="118" font-weight="bold" letter-spacing="6" fill="#e6bf6a" stroke="#7a5a24" stroke-width="1.5">Kraken</text>
+    <text x="1060" y="240" font-family="Georgia, 'Times New Roman', serif" font-size="27" font-style="italic" fill="#e3d3a8">measured never claimed, charted never guessed</text>
+  </g>
+
+  <!-- bubbles and drifting plankton -->
+  <g fill="none" stroke="#bfe8de" stroke-opacity="0.45">
+    <circle cx="500" cy="120" r="6"/><circle cx="512" cy="96" r="4"/><circle cx="505" cy="76" r="3"/>
+    <circle cx="300" cy="300" r="5"/><circle cx="292" cy="276" r="3"/>
+    <circle cx="820" cy="140" r="5"/><circle cx="830" cy="118" r="3"/>
+    <circle cx="1350" cy="200" r="4"/><circle cx="1360" cy="178" r="2.6"/>
+  </g>
+  <g fill="#e7d6a0" opacity="0.35">
+    <circle cx="120" cy="80" r="1.4"/><circle cx="640" cy="60" r="1.2"/><circle cx="760" cy="300" r="1.4"/>
+    <circle cx="980" cy="90" r="1.2"/><circle cx="1260" cy="120" r="1.4"/><circle cx="1400" cy="60" r="1.2"/>
+    <circle cx="560" cy="330" r="1.2"/><circle cx="160" cy="220" r="1.3"/>
+  </g>
+
+  <!-- painterly grain and vignette -->
+  <rect width="1440" height="480" filter="url(#grain)" opacity="0.07"/>
+  <rect width="1440" height="480" fill="url(#vignette)"/>
+</svg>

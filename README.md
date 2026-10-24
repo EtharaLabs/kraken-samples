@@ -1,6 +1,6 @@
-<p align="center"><img src="images/hero.svg" alt="Project" width="720"></p>
+<p align="center"><img src="images/hero.svg" alt="Kraken" width="720"></p>
 
-# Project: samples
+# Kraken: samples
 
 <p align="center"><b>The samples lane: 0 of 30 Harbor task bundles.</b></p>
 
@@ -61,10 +61,10 @@ Each bundle directory is a complete Harbor task: `task.toml` is the runner manif
 
 ```bibtex
 @misc{kraken2026,
-  title  = {Kraken: A Repository-Level Performance Optimization RL Environment},
+  title  = {Kraken: Repository-Level Performance Optimization Tasks},
   author = {{Ethara.AI}},
   year   = {2026},
-  note   = {Grounded in SWE-fficiency (Ma et al., arXiv:2511.06090). Signed genesis digest sha256:9b38b6817e2a995c12657e4157f5ac6dd1582131698c9bc96ed10a6d4df7dafa. Available at https://github.com/Ethara-Ai/kraken.}
+  note   = {Grounded in SWE-fficiency (Ma et al., arXiv:2511.06090).}
 }
 ```
 
