@@ -77,3 +77,9 @@ Kraken is released under the MIT License, Copyright (c) 2026 Ethara.AI. The full
 - Organization: Ethara.AI at <https://github.com/Ethara-Ai>
 - Security disclosures: `security@ethara.ai`; the report classes, response targets, and safe-harbor terms are stated once in [SECURITY.md](SECURITY.md).
 - Contribution route: entry rules and the where-changes-go routing are stated in [CONTRIBUTING.md](CONTRIBUTING.md); ownership by path is declared in [.github/CODEOWNERS](.github/CODEOWNERS).
+
+---
+
+## Copyright
+
+Copyright (c) 2026 Green Rider Technology LLP (Ethara AI). All rights reserved.
