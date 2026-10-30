@@ -1,6 +1,0 @@
-include README.md
-include doc/*
-include LICENSE
-include tests/*
-include pennylane/logging/log_config.toml
-include pennylane/transforms/sign_expand/sign_expand_data.json
