@@ -63,8 +63,6 @@ flowchart LR
     bundle --> n2["environment/<br/>agent sandbox image"]
     bundle --> n3["tests/<br/>verifier, hidden from the agent"]
     bundle --> n4["solution/<br/>private oracle"]
-    bundle --> n5["VERDICT.md"]
-    bundle --> n6["trajectories/"]
 ```
 
 ```mermaid
