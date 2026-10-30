@@ -1,0 +1,43 @@
+{
+  "task": {
+    "path": "."
+  },
+  "trial_name": "64356c38-2f28-5b44-b196-7913f6f1__M9TEYcq",
+  "trials_dir": "/home/ankit-ethara/kraken-s5/pilot/jobs/pilot-opus55-pass4-20261028-202346",
+  "agent_setup_timeout_multiplier": 10.0,
+  "agent": {
+    "name": "claude-code",
+    "model_name": "anthropic/claude-opus-5-5",
+    "base_url": "http://172.17.0.1:8642",
+    "model_api_key_name": "<redacted>",
+    "model_api_format": "anthropic_messages",
+    "env": {
+      "ANTHROPIC_API_KEY": "<redacted>"
+    }
+  },
+  "environment": {
+    "type": "docker",
+    "extra_docker_compose": [
+      "/home/ankit-ethara/kraken-s5/pilot/agent-hosts.compose.yaml"
+    ],
+    "extra_allowed_hosts": [
+      "deb.debian.org",
+      "security.debian.org",
+      "downloads.claude.ai",
+      "storage.googleapis.com",
+      "registry.npmjs.org"
+    ]
+  },
+  "verifier": {
+    "env": {
+      "REWARDKIT_JUDGE": "litellm_proxy/gpt-6-astra",
+      "KRAKEN_JUDGE_LINEAGE": "openai",
+      "LITELLM_PROXY_API_BASE": "http://172.17.0.1:8790/v1",
+      "LITELLM_PROXY_API_KEY": "<redacted>"
+    },
+    "extra_allowed_hosts": [
+      "172.17.0.1"
+    ]
+  },
+  "job_id": "48d535dc-392a-43d4-a0ea-7115ba11637a"
+}

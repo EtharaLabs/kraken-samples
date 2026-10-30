@@ -1,0 +1,21 @@
+diff --git a/pennylane/ops/op_math/controlled.py b/pennylane/ops/op_math/controlled.py
+--- a/pennylane/ops/op_math/controlled.py
++++ b/pennylane/ops/op_math/controlled.py
+@@ -38,7 +38,7 @@
+ from pennylane.compiler import compiler
+ from pennylane.core import Operator2
+ from pennylane.core.operator import Operation, Operator
+-from pennylane.core.operator.operator2 import pop_op_eqns  # tach-ignore
++from pennylane.core.operator.operator2 import _pop_op_eqns_backward  # tach-ignore
+ from pennylane.decomposition.resources import resolve_work_wire_type
+ from pennylane.exceptions import (
+     GeneratorUndefinedError,
+@@ -207,7 +207,7 @@
+ 
+     # Remove base operator from the queue.
+     qp.QueuingManager.remove(op)
+-    _ = pop_op_eqns((op,))
++    _ = _pop_op_eqns_backward((op,))
+ 
+     if (
+         custom_op := custom_ctrl_dispatch(

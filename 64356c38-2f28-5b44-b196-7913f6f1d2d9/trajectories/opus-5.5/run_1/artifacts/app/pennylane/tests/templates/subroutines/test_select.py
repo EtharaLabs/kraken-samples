@@ -1,0 +1,1100 @@
+# Copyright 2018-2021 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Tests for the Select template.
+"""
+
+# pylint: disable=protected-access,too-many-arguments,import-outside-toplevel, no-self-use
+import copy
+
+import numpy as np
+import pytest
+from scipy.stats import unitary_group
+
+import pennylane as qp
+from pennylane import numpy as pnp
+from pennylane.core.operator import abstractify
+from pennylane.decomposition.resources import CompressedResourceOp
+from pennylane.templates.subroutines.select import (
+    _partial_select,
+    _select_decomp_multi_control_work_wire,
+    _select_decomp_unary,
+)
+from pennylane.typing import AbstractWires, Bool, Wire
+from tests.decomposition.conftest import to_resources
+
+
+@pytest.mark.usefixtures("enable_and_disable_capture")
+@pytest.mark.parametrize(
+    "num_ops, num_controls",
+    [(0, 1), (1, 1), (2, 1), (1, 2), (4, 2), (3, 4), (10, 4), (15, 4), (16, 4)],
+)
+@pytest.mark.parametrize("partial", [True, False])
+@pytest.mark.parametrize("work_wires", [None, [5, 6, 7]])
+@pytest.mark.parametrize("parametrized", [False, True])
+def test_standard_checks(num_ops, num_controls, partial, work_wires, parametrized):
+    """Run standard validity tests."""
+    if parametrized:
+        ops = [qp.RX(0.2, 0) for _ in range(num_ops)]
+    else:
+        ops = [qp.MultiControlledX([0, 10, 11, 12]) for _ in range(num_ops)]
+    control = list(range(1, num_controls + 1))
+
+    op = qp.Select(ops, control, work_wires=work_wires, partial=partial)
+    if num_ops > 0:
+        if parametrized:
+            assert op.target_wires == qp.wires.Wires(0)
+        else:
+            assert op.target_wires == qp.wires.Wires([0, 10, 11, 12])
+    else:
+        assert op.target_wires == qp.wires.Wires([])
+    qp.ops.functions.assert_valid(
+        op,
+        # differentiation and bind_new_parameters fail now that control_values are data
+        skip_differentiation=not parametrized,
+        skip_bind_new_parameters=not parametrized,
+    )
+
+
+@pytest.mark.unit
+def test_repr():
+    """Test the repr method."""
+    ops = [qp.X(0), qp.Y(0)]
+    control = [1]
+
+    op = qp.Select(ops, control)
+    assert repr(op) == "Select(ops=[X(0), Y(0)], control=[1], partial=False)"
+
+    op = qp.Select(ops, control, partial=True)
+    assert repr(op) == "Select(ops=[X(0), Y(0)], control=[1], partial=True)"
+
+
+class TestAbstractSelect:
+    """Test that ``Select`` can be instantiated with abstract inputs. This includes
+    tests for fully abstract and partially abstract Selects, including tests for
+    cases where the target operators may be CompressedResourceOps.
+    """
+
+    def test_abstract_control_wires(self):
+        """Test instantiation with abstract control wires and concrete operators."""
+        op = qp.Select([qp.X(2), qp.Y(3)], control=Wire[1])
+
+        assert op.control == Wire[1]
+        assert op.target_wires == qp.wires.Wires([2, 3])
+        assert op.wires == Wire[3]
+        assert not op.is_fully_abstract
+
+    def test_abstract_work_wires(self):
+        """Test instantiation with abstract work wires and concrete control/operators."""
+        op = qp.Select([qp.X(2), qp.Y(2)], control=[0], work_wires=Wire[2])
+
+        assert op.control == qp.wires.Wires([0])
+        assert op.work_wires == Wire[2]
+        assert op.wires == qp.wires.Wires([0, 2])
+        assert op.target_wires == qp.wires.Wires([2])
+        assert not op.is_fully_abstract
+
+    def test_abstract_operators_concrete_control(self):
+        """Test instantiation with abstract operators and concrete control wires."""
+        op = qp.Select([abstractify(qp.X(2)), abstractify(qp.Y(3))], control=[0])
+
+        assert op.control == qp.wires.Wires([0])
+        assert op.target_wires == Wire[2]
+        assert op.wires == Wire[3]
+        assert len(op.ops) == 2
+        assert not op.is_fully_abstract
+
+    def test_mixed_concrete_and_abstract_operators(self):
+        """Test instantiation with a mix of concrete and abstract target operators."""
+        op = qp.Select([abstractify(qp.X(2)), qp.Y(3)], control=[0])
+
+        assert op.control == qp.wires.Wires([0])
+        assert op.target_wires == Wire[2]
+        assert op.wires == Wire[3]
+        assert len(op.ops) == 2
+        assert not op.is_fully_abstract
+
+    def test_abstract_control_and_work_wires(self):
+        """Test instantiation with both abstract control and work wires."""
+        op = qp.Select([qp.X(2), qp.Y(3)], control=Wire[1], work_wires=Wire[2])
+
+        assert isinstance(op.control, AbstractWires)
+        assert isinstance(op.work_wires, AbstractWires)
+        assert op.control == Wire[1]
+        assert op.work_wires == Wire[2]
+        assert op.target_wires == qp.wires.Wires([2, 3])
+        assert op.wires == Wire[3]
+        assert not op.is_fully_abstract
+
+    def test_abstract_operators_and_control_wires(self):
+        """Test instantiation when target operators and control wires are abstract."""
+        op = qp.Select([abstractify(qp.X(2)), abstractify(qp.Y(3))], control=Wire[1])
+
+        assert op.control == Wire[1]
+        assert op.target_wires == Wire[2]
+        assert op.wires == Wire[3]
+
+    def test_mixed_concrete_and_abstract_operators_with_overlapping_wires(self):
+        """Test instantiation with a mix of concrete and abstract target operators where
+        the concrete operators have shared wires."""
+        op = qp.Select(
+            [abstractify(qp.X(2)), qp.CNOT([0, 1]), qp.Toffoli([0, 1, 2])], control=[4, 5]
+        )
+
+        assert op.control == qp.wires.Wires([4, 5])
+        # One abstract wire, 3 concrete wires shared between the CNOT and Toffoli
+        assert op.target_wires == Wire[4]
+        assert op.wires == Wire[6]
+
+    @staticmethod
+    def _prod_rep(second_op_type):
+        """A ``CompressedResourceOp`` for the product ``X @ second``."""
+        return CompressedResourceOp(
+            qp.ops.Prod,
+            {"resources": {abstractify(qp.X): 1, abstractify(second_op_type): 1}},
+        )
+
+    @staticmethod
+    def _abstract_select(second_op):
+        """An abstract ``Select`` over ``[abstract X(0), second_op]``."""
+        return qp.Select(
+            [abstractify(qp.X(0)), second_op],
+            control=Wire[1],
+            work_wires=Wire[0],
+            partial=True,
+        )
+
+    def test_resource_rep_operator(self):
+        """Test instantiation with a resource-representation operand, as produced when a composite
+        target operator is abstractified in a resource function."""
+        rep = CompressedResourceOp(
+            qp.ops.Prod, {"resources": {abstractify(qp.X): 1, abstractify(qp.Y): 1}}
+        )
+        op = qp.Select([abstractify(qp.X(0)), rep], control=[0])
+
+        assert op.control == qp.wires.Wires([0])
+        assert op.target_wires == Wire[1]
+        assert op.wires == Wire[2]
+        assert len(op.ops) == 2
+
+    def test_equal_resource_rep_ops(self):
+        """Test that Selects whose ops include a resource rep compare equal."""
+        op1 = self._abstract_select(self._prod_rep(qp.Y))
+        op2 = self._abstract_select(self._prod_rep(qp.Y))
+        assert qp.equal(op1, op2)
+        qp.assert_equal(op1, op2)
+
+    def test_equal_abstract_operator_ops(self):
+        """Test equality when the ops are abstract operators (not resource reps)."""
+        op1 = self._abstract_select(abstractify(qp.Z(0)))
+        op2 = self._abstract_select(abstractify(qp.Z(0)))
+        assert qp.equal(op1, op2)
+
+    def test_not_equal_different_resource_rep_ops(self):
+        """Test that Selects with differing resource-rep ops are not equal."""
+        op1 = self._abstract_select(self._prod_rep(qp.Y))
+        op2 = self._abstract_select(self._prod_rep(qp.Z))
+        assert not qp.equal(op1, op2)
+        with pytest.raises(AssertionError, match="different operations at index 1"):
+            qp.assert_equal(op1, op2)
+
+    def test_hashable_resource_rep_ops(self):
+        """Test that equal abstract Selects with resource-rep ops have the same hash."""
+        op1 = self._abstract_select(self._prod_rep(qp.Y))
+        op2 = self._abstract_select(self._prod_rep(qp.Y))
+        assert hash(op1) == hash(op2)
+
+        # Usable interchangeably as dictionary keys (as in resource counting).
+        counts = {op1: 3}
+        assert counts[op2] == 3
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("alias_name", ["Multiplexer", "Multiplexor"])
+def test_aliases(alias_name):
+    """Test that Select aliases are public and instantiate Select."""
+    alias = getattr(qp, alias_name)
+
+    assert alias is qp.Select
+    assert getattr(qp.templates, alias_name) is qp.Select
+    assert alias_name in qp.__all__
+
+    op = alias([qp.X(0), qp.Y(0)], control=[1])
+    expected = qp.Select([qp.X(0), qp.Y(0)], control=[1])
+
+    qp.assert_equal(op, expected)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "K, control, expected",
+    [
+        (2, ["a"], [[("a",), (0,)], [("a",), (1,)]]),
+        (2, ["a", 33], [[(33,), (0,)], [(33,), (1,)]]),
+        (3, [7, "aux"], [[(7, "aux"), (0, 0)], [("aux",), (1,)], [(7,), (1,)]]),
+        (
+            11,
+            [0, 1, 2, 3],
+            [
+                [(0, 1, 2, 3), (0, 0, 0, 0)],
+                [(0, 1, 2, 3), (0, 0, 0, 1)],
+                [(0, 1, 2, 3), (0, 0, 1, 0)],
+                [(1, 2, 3), (0, 1, 1)],
+                [(1, 2, 3), (1, 0, 0)],
+                [(1, 2, 3), (1, 0, 1)],
+                [(1, 2, 3), (1, 1, 0)],
+                [(1, 2, 3), (1, 1, 1)],
+                [(0, 2, 3), (1, 0, 0)],
+                [(0, 3), (1, 1)],
+                [(0, 2), (1, 1)],
+            ],
+        ),
+    ],
+)
+def test_partial_select(K, control, expected):
+    """Tests that the _partial_select function produces the correct simplified control
+    structure."""
+    assert list(_partial_select(K, control)) == expected
+
+
+@pytest.mark.unit
+class TestSelect:
+    """Tests that the fundamental methods of Select work properly."""
+
+    def test_copy(self):
+        """Test that the copy function of Select works correctly."""
+        ops = [qp.X(wires=2), qp.RX(0.2, wires=3), qp.Y(wires=2), qp.SWAP([2, 3])]
+        op = qp.Select(ops, control=[0, 1])
+        op_copy = copy.copy(op)
+
+        qp.assert_equal(op, op_copy)
+
+    @pytest.mark.parametrize(
+        ("ops", "control"),
+        [
+            ([qp.X(0)], [1]),
+            ([qp.X(0), qp.Y(0)], [1]),
+            ([qp.RX(0.5, 0), qp.RY(0.7, 1)], [2]),
+            ([qp.X(0), qp.I(0), qp.Z(0)], [1, 2]),
+            ([qp.RX(0.5, 0), qp.RY(0.7, 1), qp.RZ(0.3, 1), qp.X(2)], [3, 4]),
+            ([qp.X(0), qp.I(0), qp.I(0), qp.RX(0.3, 0)], [1, 2]),
+            ([qp.X("a"), qp.Z("b"), qp.RX(0.7, "b")], ["c", 1]),
+            ([qp.X("a"), qp.RX(0.7, "b")], ["c", 1]),
+        ],
+    )
+    def test_basic_decomposition(self, ops, control):
+        """Test the correctness of the Select template decomposition with partial=False.
+        Tests both the returned and the queued operations."""
+        control_values = [
+            list(map(int, np.binary_repr(i, width=len(control)))) for i in range(len(ops))
+        ]
+        expected_gates = [qp.ctrl(op, control, vals) for op, vals in zip(ops, control_values)]
+
+        select_op = qp.Select(ops, control, partial=False)
+        with qp.queuing.AnnotatedQueue() as q0:
+            decomp0 = select_op.decomposition()
+        decomp_queue0 = qp.tape.QuantumScript.from_queue(q0).operations
+
+        with qp.queuing.AnnotatedQueue() as q1:
+            decomp1 = qp.Select.compute_decomposition(ops, control, partial=False)
+        decomp_queue1 = qp.tape.QuantumScript.from_queue(q1).operations
+
+        for dec in [decomp0, decomp1, decomp_queue0, decomp_queue1]:
+            for op_dec, op_exp in zip(dec, expected_gates, strict=True):
+                qp.assert_equal(op_dec, op_exp)
+
+    @pytest.mark.parametrize(
+        ("ops", "control", "expected_controls"),
+        [
+            ([qp.X(0)], [1], [([], [])]),
+            ([qp.X(0), qp.Y(0)], [1], [([1], [0]), ([1], [1])]),
+            ([qp.RX(0.5, 0), qp.RY(0.7, 1)], [2], [([2], [0]), ([2], [1])]),
+            ([qp.X(0), qp.I(0), qp.Z(0)], [1, 2], [([1, 2], [0, 0]), ([2], [1]), ([1], [1])]),
+            (
+                [qp.RX(0.5, 0), qp.RY(0.7, 1), qp.RZ(0.3, 1), qp.X(2)],
+                [3, 4],
+                [([3, 4], [0, 0]), ([3, 4], [0, 1]), ([3, 4], [1, 0]), ([3, 4], [1, 1])],
+            ),
+            (
+                [qp.X(0), qp.I(0), qp.I(0), qp.RX(0.3, 0)],
+                [1, 2],
+                [([1, 2], [0, 0]), ([1, 2], [0, 1]), ([1, 2], [1, 0]), ([1, 2], [1, 1])],
+            ),
+            (
+                [qp.X("a"), qp.Z("b"), qp.RX(0.7, "b")],
+                ["c", 1],
+                [(["c", 1], [0, 0]), ([1], [1]), (["c"], [1])],
+            ),
+            ([qp.X("a"), qp.RX(0.7, "b")], ["c", 1], [([1], [0]), ([1], [1])]),
+        ],
+    )
+    def test_basic_decomposition_partial(self, ops, control, expected_controls):
+        """Test the correctness of the Select template decomposition with partial=True.
+        Tests both the returned and the queued operations."""
+        expected_gates = [
+            qp.ctrl(op, ctrl, vals) if ctrl else op
+            for op, (ctrl, vals) in zip(ops, expected_controls)
+        ]
+
+        select_op = qp.Select(ops, control, partial=True)
+        with qp.queuing.AnnotatedQueue() as q0:
+            decomp0 = select_op.decomposition()
+        decomp_queue0 = qp.tape.QuantumScript.from_queue(q0).operations
+
+        with qp.queuing.AnnotatedQueue() as q1:
+            decomp1 = qp.Select.compute_decomposition(ops, control, partial=True)
+        decomp_queue1 = qp.tape.QuantumScript.from_queue(q1).operations
+
+        for dec in [decomp0, decomp1, decomp_queue0, decomp_queue1]:
+            for op_dec, op_exp in zip(dec, expected_gates, strict=True):
+                qp.assert_equal(op_dec, op_exp)
+
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_new_decomposition_multi_control(self, partial):
+        """Test that the multi-control decomposition is properly registered in the new system.
+        This test uses two control qubits and four target operators, so that the Select
+        template is never a partial Select, and the kwarg ``partial`` has no effect.
+        """
+        decomp = qp.list_decomps(qp.Select)["_select_decomp_multi_control"]
+
+        ops = [qp.X(2), qp.X(3), qp.X(4), qp.Y(2)]
+        op_reps = [abstractify(op) for op in ops]
+        control = (0, 1)
+
+        resource_obj = decomp.compute_resources(
+            op_reps, control=Wire[2], work_wires=Wire[0], partial=partial
+        )
+
+        assert resource_obj.num_gates == 4
+        expected_counts = {
+            qp.ctrl(qp.X(Wire[1]), Wire[2], control_values=Bool[2]): 3,
+            qp.ctrl(qp.Y(Wire[1]), Wire[2], control_values=Bool[2]): 1,
+        }
+        expected_resources = to_resources(expected_counts)
+        assert resource_obj == expected_resources
+
+        op = qp.Select(ops, control, partial=partial)
+        with qp.queuing.AnnotatedQueue() as q:
+            decomp(**op.arguments)
+
+        decomp_ops = qp.tape.QuantumScript.from_queue(q).operations
+
+        qp.assert_equal(decomp_ops[0], qp.ctrl(qp.X(2), (0, 1), control_values=[0, 0]))
+        qp.assert_equal(decomp_ops[1], qp.ctrl(qp.X(3), (0, 1), control_values=[0, 1]))
+        qp.assert_equal(decomp_ops[2], qp.ctrl(qp.X(4), (0, 1), control_values=[1, 0]))
+        qp.assert_equal(decomp_ops[3], qp.ctrl(qp.Y(2), (0, 1), control_values=[1, 1]))
+
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_new_decomposition_multi_control_partial(self, partial):
+        """Test that the multi-control decomposition is properly registered in the new system.
+        This test uses two control qubits and three target operators, so that the Select
+        template is a partial Select, and the kwarg ``partial`` has an effect.
+        """
+
+        decomp = qp.list_decomps(qp.Select)["_select_decomp_multi_control"]
+
+        ops = [qp.X(2), qp.X(3), qp.SWAP([2, 3])]
+        op_reps = [abstractify(op) for op in ops]
+        control = (0, 1)
+
+        resource_obj = decomp.compute_resources(
+            op_reps, control=Wire[2], work_wires=Wire[0], partial=partial
+        )
+
+        assert resource_obj.num_gates == 3
+
+        if partial:
+            expected_counts = {
+                qp.ctrl(qp.X(Wire[1]), Wire[2], control_values=Bool[2]): 1,
+                qp.ctrl(qp.X(Wire[1]), Wire[1]): 1,
+                qp.ctrl(qp.SWAP(Wire[2]), Wire[1]): 1,
+            }
+        else:
+            expected_counts = {
+                qp.ctrl(qp.X(Wire[1]), Wire[2], control_values=Bool[2]): 2,
+                qp.ctrl(qp.SWAP(Wire[2]), Wire[2], control_values=Bool[2]): 1,
+            }
+
+        expected_resources = to_resources(expected_counts)
+        assert resource_obj == expected_resources
+
+        op = qp.Select(ops, control, partial=partial)
+        with qp.queuing.AnnotatedQueue() as q:
+            decomp(**op.arguments)
+
+        decomp_ops = qp.tape.QuantumScript.from_queue(q).operations
+
+        if partial:
+            ctrls = [(0, 1), (1,), (0,)]
+            ctrl_vals = [[0, 0], [1], [1]]
+        else:
+            ctrls = [(0, 1)] * 3
+            ctrl_vals = [[0, 0], [0, 1], [1, 0]]
+        for decomp_op, op, ctrl, ctrl_val in zip(decomp_ops, ops, ctrls, ctrl_vals, strict=True):
+            qp.assert_equal(decomp_op, qp.ctrl(op, ctrl, control_values=ctrl_val))
+
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_new_decomposition_multi_control_single_op(self, partial):
+        """Test that the multi-control decomposition is properly registered in the new system.
+        This test uses a single control wire and just one operator to be applied.
+        This is a partial Select, and the kwarg ``partial`` has a notable effect.
+        """
+        decomp = qp.list_decomps(qp.Select)[0]
+
+        ops = [qp.Z(1)]
+        op_reps = (abstractify(qp.Z),)
+        control = (0,)
+
+        resource_obj = decomp.compute_resources(
+            op_reps, control=Wire[1], work_wires=Wire[0], partial=partial
+        )
+
+        assert resource_obj.num_gates == 1
+
+        if partial:
+            expected_counts = {qp.Z: 1}
+        else:
+            expected_counts = {qp.ctrl(qp.Z(Wire[1]), Wire[1], control_values=Bool[1]): 1}
+
+        expected_resource = to_resources(expected_counts)
+        assert resource_obj == expected_resource
+
+        op = qp.Select(ops, control, partial=partial)
+        with qp.queuing.AnnotatedQueue() as q:
+            decomp(**op.arguments)
+
+        decomp_ops = qp.tape.QuantumScript.from_queue(q).operations
+        assert len(decomp_ops) == 1
+
+        if partial:
+            qp.assert_equal(decomp_ops[0], qp.Z(1))
+        else:
+            qp.assert_equal(decomp_ops[0], qp.ctrl(qp.Z(1), (0,), control_values=[0]))
+
+    def test_abstractify_select(self):
+        """Test that Select is abstractified correctly."""
+
+        ops = [qp.X(2), qp.X(3), qp.X(4), qp.Y(2)]
+        op = qp.Select(ops, control=(0, 1))
+
+        abstract = abstractify(op)
+        assert isinstance(abstract, qp.Select)
+        assert len(abstract.control) == 2
+        for abstract_op, concrete_op in zip(abstract.ops, ops, strict=True):
+            qp.assert_equal(abstract_op, abstractify(concrete_op))
+
+    @pytest.mark.jax
+    def test_traced_wires(self):
+        """Test that Select construction does not raise TracerBoolConversionError when the control
+        wires are JAX tracers."""
+        import jax
+        import jax.numpy as jnp
+
+        def circuit(control_wires):
+            ops = [qp.X(0), qp.Y(0)]
+            qp.Select(ops, control_wires)
+            return True
+
+        control_wires = jnp.arange(1, 3)
+        jax.make_jaxpr(circuit)(control_wires)
+
+
+class TestErrorMessages:
+    """Test that the correct errors are raised"""
+
+    @pytest.mark.parametrize(
+        ("ops", "control", "msg_match"),
+        [
+            (
+                [qp.X(wires=1), qp.Y(wires=0), qp.Z(wires=0)],
+                [1, 2],
+                "target_wires and control must not overlap",
+            ),
+            (
+                [qp.X(wires=2)] * 4,
+                [1, 2, 3],
+                "target_wires and control must not overlap",
+            ),
+            (
+                [qp.X(wires="a"), qp.Y(wires="b")],
+                ["a"],
+                "target_wires and control must not overlap",
+            ),
+        ],
+    )
+    def test_control_in_ops(self, ops, control, msg_match):
+        """Test an error is raised when a control wire is in one of the ops"""
+        with pytest.raises(ValueError, match=msg_match):
+            qp.Select(ops, control)
+
+    @pytest.mark.parametrize(
+        ("work_wires", "msg_match"),
+        [
+            ([2], "target_wires and work_wires must not overlap"),
+            ([1], "control and work_wires must not overlap"),
+        ],
+    )
+    def test_work_wires_overlap(self, work_wires, msg_match):
+        """Test that an error is raised when work wires overlap with the target or control wires."""
+        with pytest.raises(ValueError, match=msg_match):
+            qp.Select([qp.X(2), qp.Y(3)], control=[0, 1], work_wires=work_wires)
+
+    @pytest.mark.parametrize(
+        ("ops", "control", "msg_match"),
+        [
+            (
+                [qp.X(wires=0), qp.Y(wires=0), qp.Z(wires=0)],
+                [1],
+                r"Not enough control wires \(1\) for the desired number of operations \(3\). At least 2 control wires are required.",
+            ),
+            (
+                [qp.X(wires=0)] * 10,
+                [1, 2, 3],
+                r"Not enough control wires \(3\) for the desired number of operations \(10\). At least 4 control wires are required.",
+            ),
+            (
+                [qp.X(wires="a"), qp.Y(wires="b"), qp.Z(wires="c")],
+                [1],
+                r"Not enough control wires \(1\) for the desired number of operations \(3\). At least 2 control wires are required.",
+            ),
+        ],
+    )
+    def test_too_many_ops(self, ops, control, msg_match):
+        """Test that error is raised if more ops are requested than can fit in control wires"""
+        with pytest.raises(ValueError, match=msg_match):
+            qp.Select(ops, control)
+
+
+def select_rx_circuit(angles):
+    """Circuit that uses Select for tests."""
+    qp.RY(0.6135, 0)
+    qp.Select([qp.RX(angles[0], wires=[1]), qp.RY(angles[1], wires=[1])], control=0)
+    return qp.expval(qp.Z(wires=1))
+
+
+def manual_rx_circuit(angles):
+    """Circuit that manually creates Select for tests."""
+    qp.RY(0.6135, 0)
+    qp.ctrl(qp.RX(angles[0], wires=[1]), control=0, control_values=0)
+    qp.ctrl(qp.RY(angles[1], wires=[1]), control=0)
+    return qp.expval(qp.Z(wires=1))
+
+
+class TestInterfaces:
+    """Tests that the template is compatible with all interfaces, including the computation
+    of gradients."""
+
+    @pytest.mark.autograd
+    def test_autograd(self):
+        """Tests the autograd interface."""
+        dev = qp.device("default.qubit", wires=2)
+
+        circuit_default = qp.QNode(manual_rx_circuit, dev)
+        circuit_select = qp.QNode(select_rx_circuit, dev)
+
+        input_default = [0.5, 0.2]
+        input_grad = pnp.array(input_default, requires_grad=True)
+
+        grad_fn = qp.grad(circuit_default)
+        grads = grad_fn(input_grad)
+
+        grad_fn2 = qp.grad(circuit_select)
+        grads2 = grad_fn2(input_grad)
+
+        assert qp.math.allclose(grads, grads2)
+
+    @pytest.mark.autograd
+    def test_autograd_parameter_shift(self):
+        """Tests the autograd interface using the parameter-shift method."""
+        dev = qp.device("default.qubit", wires=2)
+
+        circuit_default = qp.QNode(manual_rx_circuit, dev, diff_method="parameter-shift")
+        circuit_select = qp.QNode(select_rx_circuit, dev, diff_method="parameter-shift")
+
+        input_default = [0.5, 0.2]
+        input_grad = pnp.array(input_default, requires_grad=True)
+
+        grad_fn = qp.grad(circuit_default)
+        grads = grad_fn(input_grad)
+
+        grad_fn2 = qp.grad(circuit_select)
+        grads2 = grad_fn2(input_grad)
+
+        assert qp.math.allclose(grads, grads2)
+
+    @pytest.mark.torch
+    def test_torch(self):
+        """Tests the torch interface."""
+        import torch
+
+        dev = qp.device("default.qubit", wires=2)
+
+        circuit_default = qp.QNode(manual_rx_circuit, dev)
+        circuit_torch = qp.QNode(select_rx_circuit, dev)
+
+        input_default = [0.5, 0.2]
+        input_torch = torch.tensor(input_default, requires_grad=True)
+
+        assert qp.math.allclose(
+            qp.matrix(circuit_default)(input_default), qp.matrix(circuit_torch)(input_torch)
+        )
+        assert qp.math.get_interface(qp.matrix(circuit_torch)(input_torch)) == "torch"
+
+        res = circuit_default(input_torch)
+        res.backward()
+        grads = [input_torch.grad]
+
+        res2 = circuit_torch(input_torch)
+        res2.backward()
+        grads2 = [input_torch.grad]
+
+        assert qp.math.allclose(grads[0], grads2[0])
+
+    @pytest.mark.jax
+    @pytest.mark.slow
+    def test_jax(self):
+        """Tests the jax interface."""
+        import jax
+        import jax.numpy as jnp
+
+        dev = qp.device("default.qubit", wires=2)
+
+        input_default = [0.5, 0.2]
+        input_jax = jnp.array(input_default)
+
+        circuit_default = qp.QNode(manual_rx_circuit, dev)
+        circuit_jax = qp.QNode(select_rx_circuit, dev)
+
+        assert qp.math.allclose(
+            qp.matrix(circuit_default)(input_default), qp.matrix(circuit_jax)(input_jax)
+        )
+        assert qp.math.get_interface(qp.matrix(circuit_jax)(input_jax)) == "jax"
+
+        grad_fn = jax.grad(circuit_default)
+        grads = grad_fn(input_jax)
+
+        grad_fn2 = jax.grad(circuit_jax)
+        grads2 = grad_fn2(input_jax)
+
+        assert qp.math.allclose(grads, grads2)
+
+    @pytest.mark.jax
+    def test_jax_jit(self):
+        """Tests jit within the jax interface."""
+        import jax
+
+        dev = qp.device("default.qubit", wires=4)
+        ops = [qp.X(2), qp.X(3), qp.Y(2), qp.SWAP([2, 3])]
+
+        @qp.qnode(dev)
+        def circuit():
+            qp.Select(ops, control=[0, 1])
+            return qp.state()
+
+        jit_circuit = jax.jit(circuit)
+
+        assert qp.math.allclose(circuit(), jit_circuit())
+
+
+num_controls_and_num_ops = (
+    [(nc, i) for nc in range(1, 5) for i in range(1, 2**nc + 1)]
+    + [(5, 1), (5, 2), (5, 17), (5, 24), (5, 31)]
+    + [(6, 3), (6, 8), (6, 27)]
+)
+
+
+@pytest.mark.parametrize("partial", [False, True])
+class TestUnaryIterator:
+    """Tests for the auxiliary qubit-based unary iterator decomposition of Select."""
+
+    def test_is_registered_with_select(self, partial):
+        """Test that the unary iteration decomposition is registered correctly with
+        pml.Select."""
+        # pylint: disable=unused-argument
+        decomp = qp.list_decomps(qp.Select)[1]
+        assert decomp is _select_decomp_unary
+
+    @pytest.mark.parametrize(
+        "c, K, expected_ops, expected_ops_partial",
+        [
+            (1, 1, [qp.ctrl(qp.SWAP([0, 1]), ["c0"], [0])], [qp.SWAP([0, 1])]),
+            (1, 2, [qp.ctrl(qp.SWAP([0, 1]), ["c0"], [0]), qp.CY(["c0", 1])], None),
+            (
+                2,
+                1,
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w0"]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (0, 0))),
+                ],
+                [qp.SWAP([0, 1])],
+            ),
+            (
+                2,
+                2,
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w0"]),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.CY(["w0", 1]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (0, 1))),
+                ],
+                [
+                    qp.ctrl(qp.SWAP([0, 1]), ["c1"], [0], work_wires=["w0"]),
+                    qp.ctrl(qp.Y(1), ["c1"], work_wires=["w0"]),
+                ],
+            ),
+            (
+                2,
+                3,
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w0"]),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.CY(["w0", 1]),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CNOT(["c1", "w0"]),
+                    qp.ctrl(qp.CRZ(0.4, [1, 0]), ["w0"], [1]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (1, 0))),
+                ],
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w0"]),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.CY(["w0", 1]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (0, 1))),
+                    qp.ctrl(qp.CRZ(0.4, [1, 0]), ["c0"]),
+                ],
+            ),
+            (
+                2,
+                4,
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w0"]),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.CY(["w0", 1]),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CNOT(["c1", "w0"]),
+                    qp.ctrl(qp.CRZ(0.4, [1, 0]), ["w0"], [1]),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CNOT(["w0", 0]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (1, 1))),
+                ],
+                None,
+            ),
+            (
+                3,
+                7,
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w1"]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.CY(["w1", 1]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"], (1, 1))),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.ctrl(qp.CRZ(0.4, [1, 0]), ["w1"]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.CNOT(["w1", 0]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"], (1, 1))),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CNOT(["c1", "w0"]),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.CZ(["w1", 1]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.ctrl(qp.X(0) @ qp.Z(1), ["w1"]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"])),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.CH(["w1", 1]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"], (1, 0))),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (1, 1))),
+                ],
+                [
+                    qp.Elbow(["c0", "c1", "w0"], (0, 0)),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.ctrl(qp.SWAP([0, 1]), ["w1"]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.CY(["w1", 1]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"], (1, 1))),
+                    qp.ctrl(qp.X("w0"), control="c0", control_values=[0]),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.ctrl(qp.CRZ(0.4, [1, 0]), ["w1"]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.CNOT(["w1", 0]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"], (1, 1))),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CNOT(["c1", "w0"]),
+                    qp.Elbow(["w0", "c2", "w1"], (1, 0)),
+                    qp.CZ(["w1", 1]),
+                    qp.CNOT(["w0", "w1"]),
+                    qp.ctrl(qp.X(0) @ qp.Z(1), ["w1"]),
+                    qp.adjoint(qp.Elbow(["w0", "c2", "w1"])),
+                    qp.CNOT(["c0", "w0"]),
+                    qp.CH(["w0", 1]),
+                    qp.adjoint(qp.Elbow(["c0", "c1", "w0"], (1, 1))),
+                ],
+            ),
+        ],
+    )
+    def test_expected_operators(self, c, K, expected_ops, expected_ops_partial, partial):
+        ops = [
+            qp.SWAP([0, 1]),
+            qp.Y(1),
+            qp.CRZ(0.4, [1, 0]),
+            qp.X(0),
+            qp.Z(1),
+            qp.X(0) @ qp.Z(1),
+            qp.H(1),
+        ][:K]
+        control = [f"c{i}" for i in range(c)]
+        work_wires = [f"w{i}" for i in range(c - 1)]
+        decomp = _select_decomp_unary(
+            ops=ops, control=control, work_wires=work_wires, partial=partial
+        )
+
+        if partial and expected_ops_partial is not None:
+            expected = expected_ops_partial
+        else:
+            expected = expected_ops
+        for op, exp_op in zip(decomp, expected, strict=True):
+            qp.assert_equal(op, exp_op)
+
+    @pytest.mark.parametrize("num_controls", [0, 1, 2, 3])
+    def test_no_ops(self, num_controls, partial):
+        """Test that the unary iterator does not return any operators for an empty list
+        of target operators."""
+
+        control = list(range(num_controls))
+        work = list(range(num_controls, 2 * num_controls - 1))
+
+        with qp.queuing.AnnotatedQueue() as q:
+            _select_decomp_unary(ops=[], control=control, work_wires=work, partial=partial)
+
+        assert len(q) == 0
+
+    def test_with_few_ops(self, partial):
+        """Test that the unary iterator is correct when there are only a few operators compared to
+        the maximal capacity of the iterator."""
+
+        control = list(range(5))
+        work = list(range(5, 9))
+        ops = [qp.RY(0.1 * 2**i, 9) for i in range(4)]
+        if partial:
+            state = np.random.random(2**3) + 1j * np.random.random(2**3)
+            state /= np.linalg.norm(state)
+            state_prep_wires = [3, 4, 9]
+        else:
+            state = np.random.random(2**6) + 1j * np.random.random(2**6)
+            state /= np.linalg.norm(state)
+            state_prep_wires = control + [9]
+
+        @qp.qnode(qp.device("lightning.qubit"))
+        def node():
+            qp.StatePrep(state, wires=state_prep_wires)
+            _select_decomp_unary(ops=ops, control=control, work_wires=work, partial=partial)
+            for i, op in enumerate(ops):
+                cvals = (i >> np.arange(4, -1, -1)) & 1
+                qp.ctrl(qp.adjoint(op), control=control, control_values=cvals)
+            qp.adjoint(qp.StatePrep)(state, wires=state_prep_wires)
+            return qp.probs(list(range(10)))
+
+        probs = node()
+        exp_probs = np.zeros(2**10)
+        exp_probs[0] = 1.0
+        assert np.allclose(exp_probs, probs)
+
+    @pytest.mark.parametrize("num_controls, num_ops", num_controls_and_num_ops)
+    def test_identity_with_basis_states(self, num_controls, num_ops, partial):
+        """Test that the unary iterator is correct by asserting that the identity
+        matrix is created by preparing the i-th computational basis state conditioned on the
+        i-th basis state in the control qubits."""
+
+        dev = qp.device("default.qubit")
+
+        # Create angle set so that feeding angles[i] into RX on the i-th control wire will
+        # yield broadcasted BasisEmbedding (which does not support broadcasting atm)
+        angles = [list(map(int, np.binary_repr(i, width=num_controls))) for i in range(num_ops)]
+        angles = np.pi * np.array(angles).T
+        control = list(range(num_controls))
+        work = list(range(num_controls, 2 * num_controls - 1))
+        target = list(range(2 * num_controls - 1, 3 * num_controls - 1))
+
+        ops = [
+            qp.BasisEmbedding(qp.math.int_to_binary(i, len(target)), wires=target)
+            for i in range(num_ops)
+        ]
+
+        @qp.qnode(dev)
+        def circuit():
+            for w, angle in zip(control, angles, strict=True):
+                qp.RX(angle, w)
+            _select_decomp_unary(ops=ops, control=control, work_wires=work, partial=partial)
+            return qp.probs(target)
+
+        probs = circuit()
+        assert np.allclose(probs, np.eye(2**num_controls)[:num_ops])
+
+    @pytest.mark.parametrize(
+        ("num_ops", "control", "work", "msg_match"),
+        [(9, 4, 1, "Can't use this decomposition")],
+    )
+    def test_operation_and_test_wires_error(
+        self, num_ops, control, work, msg_match, partial
+    ):  # pylint: disable=too-many-arguments
+        """Test that proper errors are raised"""
+
+        wires = qp.registers({"target": num_ops, "control": control, "work": work})
+        ops = [
+            qp.BasisEmbedding(qp.math.int_to_binary(i, len(wires["target"])), wires=wires["target"])
+            for i in range(num_ops)
+        ]
+
+        with pytest.raises(ValueError, match=msg_match):
+            _select_decomp_unary(
+                ops=ops, control=wires["control"], work_wires=wires["work"], partial=partial
+            )
+
+    def test_error_too_few_controls(self, partial):
+        """Test that an error is raised if too few control wires are given."""
+
+        too_many_ops = [qp.X(0) for _ in range(9)]
+        exactly_right_ops = [qp.X(0) for _ in range(8)]
+        fewer_ops = [qp.X(0) for _ in range(7)]
+        kwargs = {"control": [1, 2, 3], "work_wires": [4, 5], "partial": partial}
+
+        with pytest.raises(ValueError, match="At least 4 control wires are required"):
+            _select_decomp_unary(ops=too_many_ops, **kwargs)
+
+        # Test that no error is raised for exactly right number of ops for three controls
+        _ = _select_decomp_unary(ops=exactly_right_ops, **kwargs)
+        # Test that no error is raised for fewer than exactly right number of ops
+        _ = _select_decomp_unary(ops=fewer_ops, **kwargs)
+
+    @pytest.mark.parametrize("num_controls, num_ops", num_controls_and_num_ops)
+    def test_comparison_with_select(self, num_controls, num_ops, seed, partial):
+        """Test that the unary iterator is correct by comparing it to the standard Select
+        decomposition."""
+
+        angles = [list(map(int, np.binary_repr(i, width=num_controls))) for i in range(num_ops)]
+        angles = np.pi * np.array(angles).T
+        control = list(range(num_controls))
+        work = list(range(num_controls, 2 * num_controls - 1))
+        target = [2 * num_controls - 1, 2 * num_controls]
+
+        dev = qp.device("default.qubit", wires=control + work + target)
+        unitaries = unitary_group.rvs(4, size=num_ops, random_state=seed)
+        if num_ops == 1:
+            unitaries = np.array([unitaries])
+        ops = [qp.QubitUnitary(U, wires=target) for U in unitaries]
+        adj_ops = [qp.QubitUnitary(U.conj().T, wires=target) for U in unitaries]
+
+        @qp.qnode(dev)
+        def circuit():
+            for w, angle in zip(control, angles, strict=True):
+                qp.RX(angle, w)
+            _select_decomp_unary(ops=ops, control=control, work_wires=work, partial=partial)
+            qp.Select(adj_ops, control=control, work_wires=None, partial=partial)
+            return qp.probs(target)
+
+        probs = circuit()
+        exp = np.eye(4)[0]
+        assert np.allclose(probs, exp)
+
+
+@pytest.mark.parametrize("partial", [False, True])
+class TestSelectWithWorkWire:
+    """Tests for the 1 work-wire decomposition of Select."""
+
+    @pytest.mark.parametrize("num_controls", [0, 1, 2, 3])
+    def test_no_ops(self, num_controls, partial):
+        """Test that the decomposition does not return any operators for an empty list
+        of target operators."""
+
+        control = list(range(num_controls))
+        work = ["a"]
+
+        with qp.queuing.AnnotatedQueue() as q:
+            _select_decomp_multi_control_work_wire(
+                ops=[], control=control, work_wires=work, partial=partial
+            )
+
+        assert len(q) == 0
+
+    @pytest.mark.parametrize("num_controls, num_ops", num_controls_and_num_ops)
+    def test_identity_with_basis_states(self, num_controls, num_ops, partial):
+        """Test that the decomposition is correct by asserting that the identity
+        matrix is created by preparing the i-th computational basis state conditioned on the
+        i-th basis state in the control qubits."""
+
+        dev = qp.device("default.qubit")
+
+        # Create angle set so that feeding angles[i] into RX on the i-th control wire will
+        # yield broadcasted BasisEmbedding (which does not support broadcasting atm)
+        angles = [list(map(int, np.binary_repr(i, width=num_controls))) for i in range(num_ops)]
+        angles = np.pi * np.array(angles).T
+        control = list(range(num_controls))
+        work = ["a"]
+        target = list(range(2 * num_controls - 1, 3 * num_controls - 1))
+
+        ops = [
+            qp.BasisEmbedding(qp.math.int_to_binary(i, len(target)), wires=target)
+            for i in range(num_ops)
+        ]
+
+        @qp.qnode(dev)
+        def circuit():
+            for w, angle in zip(control, angles, strict=True):
+                qp.RX(angle, w)
+            _select_decomp_multi_control_work_wire(
+                ops=ops, control=control, work_wires=work, partial=partial
+            )
+            return qp.probs(target)
+
+        probs = circuit()
+        assert np.allclose(probs, np.eye(2**num_controls)[:num_ops])
+
+    @pytest.mark.parametrize("num_controls, num_ops", num_controls_and_num_ops)
+    def test_comparison_with_select(self, num_controls, num_ops, seed, partial):
+        """Test that the decomposition is correct by comparing it to the standard Select
+        decomposition."""
+
+        angles = [list(map(int, np.binary_repr(i, width=num_controls))) for i in range(num_ops)]
+        angles = np.pi * np.array(angles).T
+        control = list(range(num_controls))
+        work = ["a"]
+        target = [2 * num_controls - 1, 2 * num_controls]
+
+        dev = qp.device("default.qubit", wires=control + work + target)
+        unitaries = unitary_group.rvs(4, size=num_ops, random_state=seed)
+        if num_ops == 1:
+            unitaries = np.array([unitaries])
+        ops = [qp.QubitUnitary(U, wires=target) for U in unitaries]
+        adj_ops = [qp.QubitUnitary(U.conj().T, wires=target) for U in unitaries]
+
+        @qp.qnode(dev)
+        def circuit():
+            for w, angle in zip(control, angles, strict=True):
+                qp.RX(angle, w)
+            _select_decomp_multi_control_work_wire(
+                ops=ops, control=control, work_wires=work, partial=partial
+            )
+            qp.Select(adj_ops, control=control, work_wires=None, partial=partial)
+            return qp.probs(target)
+
+        probs = circuit()
+        exp = np.eye(4)[0]
+        assert np.allclose(probs, exp)

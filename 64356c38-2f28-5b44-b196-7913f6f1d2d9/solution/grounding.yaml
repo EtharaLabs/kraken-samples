@@ -1,0 +1,798 @@
+# FORGE-CANARY-BEGIN
+# FORGE-CANARY-SLOT-1: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-SLOT-2: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-SLOT-3: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-END
+# Private source of truth for this bundle. solution/recompute.py derives every
+# generated file from this record and from the source trees named below.
+schema: kraken.slot5.grounding/v1
+run_id: forge-ankit-ethara-ethara-ai-20261026t134628z-b5ea82
+slot: 5
+task_name: ethara/pennylane-capture-wrapped-operator-tracing
+archetype: perf-optimization-fn
+category: credit-assignment
+axis: Reasoning
+language: Python
+
+upstream:
+  canonical_repo: github.com/PennyLaneAI/pennylane
+  host_numeric_id: 129936360
+  license: Apache-2.0
+  base_commit: d5e813f5ae304acb0e90251351b9b9ea4328a895
+  base_commit_committed_at: "2026-10-14T16:26:14Z"
+  reference_fix_commit: 8c40ed916ee90c34bbaf143b3c74e33ac2453758
+  reference_fix_parent: d5e813f5ae304acb0e90251351b9b9ea4328a895
+  reference_pull_requests: [10298, 10327]
+  event_timestamp: "2026-10-08T18:35:24Z"
+  merged_at: "2026-10-14T19:34:27Z"
+  fork_ancestry_snapshot_digest: 3f733efea31713f3a6fb87a1883b90418747dba0082bbcc441554bd731b0a1fe
+  tarballs:
+    base: {url: "https://github.com/PennyLaneAI/pennylane/archive/d5e813f5ae304acb0e90251351b9b9ea4328a895.tar.gz",
+           sha256: c070e2bf1decb6e57adb78bdf366fe1a68d141e1886757901054927ad72013f5}
+    expert: {url: "https://github.com/PennyLaneAI/pennylane/archive/8c40ed916ee90c34bbaf143b3c74e33ac2453758.tar.gz",
+             sha256: fbd999b35e2f6b68986395009185aaf68a41f973054f15ab4c932593d7ab49cf}
+    harbor: {url: "https://github.com/harbor-framework/harbor/archive/fdba28fc411e47e8765420a1a063b4918fce3def.tar.gz",
+             sha256: 2a2e7fd5a87e533b8ecc014836dd78c160a7dd445629ee9795b682d3be5004f9}
+  reference_patch:
+    path: solution/reference.patch
+    files:
+      - pennylane/core/operator/operator2.py
+      - pennylane/core/queuing.py
+      - pennylane/ops/op_math/composite2.py
+      - pennylane/ops/op_math/prod.py
+    dropped: [doc/releases/changelog-dev.md, tests/core/operator/test_pop_op_eqns.py]
+  graded_test: tests/core/operator/test_pop_op_eqns.py
+
+dependencies:
+  resolver: the repository's own uv.lock at the base commit, uv sync --locked --group dev
+  python: "3.13 (python:3.13-slim-trixie index sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962)"
+  uv: "0.11.22 (ghcr.io/astral-sh/uv index sha256:16b63af0e7342dd372da9ca989ea9fa542fc68f4640972d59a8450a5240fe42e)"
+  key_pins: {jax: 0.7.1, pennylane-lightning: 0.45.0}
+  project_install: editable, from the base-commit tree; the source tree is the import root
+  rewardkit: "harbor-rewardkit 0.2.4 built from packages/rewardkit at Harbor fdba28fc411e47e8765420a1a063b4918fce3def; dependencies hash-locked in tests/rewardkit-requirements.txt (litellm 1.106.4, exclude-newer 2026-10-26)"
+
+# Discovery values (item 10a.1). Each is established in the built environment at
+# the location named; none is stated in instruction.md. recompute.py re-derives
+# the source locations from the base tree when it is present.
+discovery:
+  - id: DV1
+    contract_value: the cost sits in pop_op_eqns in pennylane/core/queuing.py, reached from the constructors of symbolic operators that take an already-traced base
+    contract_wording: the contract names pennylane/core/queuing.py; at the base commit the function is defined in pennylane/core/operator/operator2.py and queuing.py reaches it through remove_from_program
+    established_at:
+      - {file: pennylane/core/operator/operator2.py, symbol: pop_op_eqns}
+      - {file: pennylane/core/queuing.py, symbol: remove_from_program}
+  - id: DV2
+    contract_value: each removal rebuilds frame.tracing_eqns, and every wrapped operator triggers one removal, so the work is quadratic in the number of operators
+    established_at:
+      - {file: pennylane/core/operator/operator2.py, symbol: pop_op_eqns, needle: "frame.tracing_eqns = [r for r in frame.tracing_eqns if r() is not eqn]"}
+  - id: DV3
+    contract_value: removals can be grouped per frame and done in one backward sweep keyed by equation identity, stopping once every target is removed
+    established_at:
+      - {file: solution/reference.patch, symbol: pop_op_eqns}
+  - id: DV4
+    contract_value: the hidden workloads mix CNOT, Controlled and nested Adjoint chains, so each wrapper path earns its own share of the reward
+    realized_as: five families in two equal halves of the timed credit (contract revision 7) - the single-removal half is CNOT-style, Controlled, Adjoint and Adjoint of Controlled at one eighth each, and the batch-removal half is one qp.prod over many factors
+    established_at:
+      - {file: tests/harness/workloads.py, symbol: FAMILIES}
+call_sites_at_base:
+  - {file: pennylane/ops/op_math/prod.py, reaches: remove_from_program, family: prod}
+  - {file: pennylane/ops/op_math/controlled2.py, reaches: remove_from_program, family: cnot}
+  - {file: pennylane/ops/op_math/controlled.py, reaches: pop_op_eqns, family: ctrl}
+  - {file: pennylane/ops/op_math/controlled2.py, reaches: pop_op_eqns, family: ctrl}
+  - {file: pennylane/ops/op_math/adjoint.py, reaches: pop_op_eqns, family: adj}
+  - {file: pennylane/ops/op_math/adjoint2.py, reaches: pop_op_eqns, family: adj}
+
+oracle:
+  applier: solution/apply.py
+  rule: >-
+    solution/solve.sh is a ladder. Each live line is one command that applies one staged sub-patch under
+    solution/stages/ and depends only on the lines before it. Stage 1 adds _pop_op_eqns_backward, the
+    upstream backward sweep, beside pop_op_eqns and routes one call site to it; each later stage routes one
+    more call site. The last line reverts the four stages and applies solution/reference.patch, so the full
+    oracle tree is byte-identical to the base plus the upstream fix.
+  ladder:
+    - id: S1
+      ops: ["+stages/1-remove-from-program.patch"]
+      effect: remove_from_program (queuing.py) uses the backward sweep; fixes the CNOT-style family
+    - id: S2
+      ops: ["+stages/2-controlled-create.patch"]
+      effect: create_controlled_op2 (controlled.py) uses it; part of the qp.ctrl family
+    - id: S3
+      ops: ["+stages/3-controlled-bind.patch"]
+      effect: Controlled2._bind_primitive (controlled2.py) uses it; the rest of qp.ctrl, most of the nested family
+    - id: S4
+      ops: ["+stages/4-adjoint.patch"]
+      effect: _make_adjoint_op (adjoint.py) uses it; the qp.adjoint family and the rest of the nested family
+    - id: S5
+      ops: ["+stages/5-composite-chunked.patch"]
+      effect: >-
+        remove_from_program takes many operators and CompositeOp2 removes its operands eight at a time, one
+        backward sweep per chunk; the qp.prod family clears tau but stays slower than the expert (a partial
+        share), because the sweeps still grow with the number of chunks
+    - id: U
+      ops: ["-stages/5-composite-chunked.patch", "-stages/4-adjoint.patch", "-stages/3-controlled-bind.patch", "-stages/2-controlled-create.patch", "-stages/1-remove-from-program.patch", "+reference.patch"]
+      effect: revert the stages and apply the upstream fix
+
+# Item 7j / G-ALT-SOLUTION: three independent correct solutions, each a self-contained solution
+# directory (its own solve.sh) that Harbor runs as the oracle.
+alternates:
+  - name: reverse-search
+    path: solution/alternates/reverse-search/solve.sh
+    files: [pennylane/core/operator/operator2.py]
+    approach: "pop_op_eqns walks each consumed operator's frame from its newest entry and deletes the matching entry in place, one operator at a time with no grouping; a frame with auto_dce raises RuntimeError instead of asserting."
+  - name: tail-peek
+    path: solution/alternates/tail-peek/solve.sh
+    files: [pennylane/core/queuing.py, pennylane/ops/op_math/controlled.py, pennylane/ops/op_math/controlled2.py, pennylane/ops/op_math/adjoint.py]
+    approach: "pop_op_eqns is left as at base; a new drop_captured_eqns in queuing.py pops the newest entry when it is the target and otherwise falls back to the full filter, and remove_from_program, create_controlled_op2, Controlled2._bind_primitive and _make_adjoint_op call it; a frame with auto_dce raises ValueError."
+  - name: suffix-sweep
+    path: solution/alternates/suffix-sweep/solve.sh
+    files: [pennylane/core/operator/operator2.py]
+    approach: "pop_op_eqns groups its targets by frame and a new _sweep_suffix reads each frame backwards only until every target is seen, then rebuilds that suffix by slice assignment, resolving each entry once; a frame with auto_dce raises NotImplementedError."
+alternates_literal_rule: >-
+    Every identifier the grader requires exists at the base commit: the expert test file imports
+    pennylane.core.operator.operator2.pop_op_eqns and jax's JaxprStackFrame, calls pop_op_eqns with a list
+    and reads frame.tracing_eqns through add_eqn, and builds CNOT, adjoint and ctrl programs; none of these
+    is new in the upstream fix. The upstream helper names (targets_by_frame) and the new remove_from_program
+    signature (*ops) are required by no check, and tail-peek leaves pop_op_eqns untouched while the other
+    two rename every local, so the grader is varied away from the gold patch's identifiers. No grader
+    literal appears in instruction.md or needs to.
+
+visible_workload:
+  path: environment/workload/trace_workload.py
+  installed_at: /app/workload/trace_workload.py
+  family: cnot
+  gates: [CNOT, CZ, CRX, Toffoli]
+  n: 6000
+  seed: 20261014
+  program_digest: 92d44047157340710fb64a635e3391cec9a4b29159388367dcc1b2e4819bd291
+  literals: ["20261014", "92d44047157340710fb64a635e3391cec9a4b29159388367dcc1b2e4819bd291"]
+
+hidden_workloads:
+  generator: tests/harness/workloads.py
+  families:
+    cnot: [9000, 13000]
+    ctrl: [7000, 10000]
+    adj: [10000, 14000]
+    adjctrl: [5500, 8500]
+    # one qp.prod call over n factors: a single removal of many traced operators (operator decision of 2026-10-27)
+    prod: [10000, 15000]
+  # The timed credit is two equal halves that follow the two parts of the reference fix (operator decision of
+  # 2026-10-28, contract revision 7): the four single-removal families share one half, the qp.prod removal of
+  # many operators holds the other. Chosen after the W6 per-operator reverse search was seen to score 0.80 under
+  # equal fifths; the basis is recorded under reward.family_weighting_basis.
+  family_weights: {cnot: 0.125, ctrl: 0.125, adj: 0.125, adjctrl: 0.125, prod: 0.5}
+  seeds: drawn per (family, size) at verify time from the operating system's random source, shared by base, expert and patch and by every repetition
+  reps: 5
+  order: interleaved, rotating the base, expert, patch order by repetition
+  timed_region: the first jax.make_jaxpr call of a fresh interpreter; spec generation and imports are outside it
+  statistic: minimum of the repetitions (a first-call wall clock is bounded below; host contention only adds time, so the fastest fresh process is the observation least affected by noise; adopted from the staging networkx verifier on 2026-10-27)
+  program_seeds: 6
+  program_statements: 60
+
+timing:
+  runner_uid: 10001
+  child_timeout_sec: 900
+  pytest_timeout_sec: 1800
+  threads: 1
+  # tau is the noise gate on T_base / T_patch; kappa is the full-credit tolerance on T_patch / T_expert.
+  tau: 1.25
+  kappa: 1.20
+  calibration:
+    method: >-
+      base and expert trees each against themselves in the verifier image (arm64, 2 CPUs, 6 GB, no other
+      Docker work on the host), 6 fresh-process first-call timings per hidden workload and tree,
+      interleaved across workloads and trees, run of 2026-10-27 (rig /tmp author script calib.py)
+    single_run_spread_max_over_min:
+      base: {adj_10000: 1.148, adj_14000: 1.224, adjctrl_5500: 1.134, adjctrl_8500: 1.213, cnot_9000: 1.213, cnot_13000: 1.340, ctrl_7000: 1.151, ctrl_10000: 1.200}
+      expert: {adj_10000: 1.174, adj_14000: 1.089, adjctrl_5500: 1.156, adjctrl_8500: 1.150, cnot_9000: 1.151, cnot_13000: 1.109, ctrl_7000: 1.142, ctrl_10000: 1.151}
+    median_of_3_ratio_interleaved_max:
+      base: {adj_10000: 1.084, adj_14000: 1.001, adjctrl_5500: 1.014, adjctrl_8500: 1.104, cnot_9000: 1.025, cnot_13000: 1.054, ctrl_7000: 1.078, ctrl_10000: 1.036}
+      expert: {adj_10000: 1.026, adj_14000: 1.016, adjctrl_5500: 1.006, adjctrl_8500: 1.063, cnot_9000: 1.042, cnot_13000: 1.029, ctrl_7000: 1.023, ctrl_10000: 1.019}
+    median_of_3_ratio_any_split_max: {base: 1.200, expert: 1.112}
+    min_of_3_ratio_any_split_max: {all_trees: 1.199}
+    prod_family: >-
+      run of 2026-10-27 (calib_prod.py, 6 interleaved fresh-process first calls per tree, verifier image, 2 CPUs):
+      base-against-base min-of-3 split max 1.021 (k=10000) and 1.088 (k=15000); expert-against-expert 1.023 and 1.012,
+      so tau = 1.25 and kappa = 1.20 hold. Expert speedup (min) 2.62x and 3.61x. A per-operator reverse search
+      (the 17-line fix an Opus 5.5 trajectory produced) reads base/patch 0.98 and 0.91, so it clears no tau and earns
+      SR_prod = 0, while it matches the expert on the four single-removal families.
+    statistic_switch_check: re-scoring every recorded control with the minimum instead of the median changes no outcome; oracle and alternates stay 1.0, ladder 1, 0.690, 0.405, 0.25, 0, every gate-closed control stays 0.0
+    expert_speedup_median_of_6: {adj_10000: 2.358, adj_14000: 2.954, adjctrl_5500: 1.853, adjctrl_8500: 2.258, cnot_9000: 2.206, cnot_13000: 2.822, ctrl_7000: 1.992, ctrl_10000: 2.633}
+    drift: the last two of the six repetitions ran 5 to 17 percent faster on every tree at once, so the host drifts between repetitions; the verifier times base, expert and patch back to back inside each repetition, which shares that drift
+    previous_shared_host_run: {single_run_spread_max: 1.190, median_of_3_ratio_max: 1.063, oracle_k2_worst_expert_over_patch: 1.107}
+    rule: >-
+      tau = 1.25 stays above every base-against-base median-of-3 ratio observed, over every split of the six
+      runs into two triples (1.200), so the unmodified tree cannot clear the gate on noise; a single run is
+      never gated. kappa = 1.20 sits above the largest expert-against-expert median-of-3 ratio (1.112 over
+      every split, 1.063 interleaved) and above the oracle's worst ratio on the shared host (1.107), so the
+      upstream fix earns exactly 1.0 on every family under host noise.
+    repetitions: >-
+      five repetitions per tree and workload (median of 5). A first oracle run on this image with three
+      repetitions paid compiled 1.0 but read T_expert / T_patch = 0.841 on ctrl 10000, inside the band by
+      0.008: single runs of the same tree spread up to 1.81x (3.71 s to 6.72 s) while the authoring session
+      itself kept about one core busy, and the Docker VM's vCPUs land on efficiency or performance cores of
+      the M1 Pro host at the scheduler's choice. A median of 5 discards two slow outliers instead of one.
+    kappa_gap: >-
+      a family earns full credit only when T_patch is within 1.20 of T_expert at every size, i.e. a speedup of
+      at least T_base / (1.20 T_expert); the smallest expert speedup is 1.85 (adjctrl 5500), so a fully paid
+      patch is at least 1.54x faster than base there and at least 0.833 of the expert's speed everywhere.
+      The partial fixes measured on the oracle ladder sit at 0.73 or below on the families they only
+      partly fix, so the band does not pay them in full.
+
+repo_tests:
+  selection:
+    - tests/capture
+    - tests/core
+    - tests/test_queuing.py
+    - tests/ops/op_math/test_adjoint.py
+    - tests/ops/op_math/test_adjoint2.py
+    - tests/ops/op_math/test_controlled.py
+    - tests/ops/op_math/test_controlled2.py
+    - tests/ops/op_math/test_controlled_ops.py
+    - tests/ops/op_math/test_composite2.py
+    - tests/ops/op_math/test_composite_op2_capture.py
+    - tests/ops/op_math/test_prod.py
+    - tests/ops/op_math/test_prod2.py
+    - tests/ops/op_math/test_pow2.py
+    - tests/ops/op_math/test_symbolic_op2.py
+    - tests/ops/op_math/test_symbolic_op2_capture.py
+    - tests/ops/op_math/test_change_op_basis2.py
+  ignore: [tests/capture/autograph]
+  rule: every test the base commit passes (recorded at verifier image build) still passes, and every test of the expert's added test file passes
+
+reward:
+  formula: >-
+    When G1 to G4 all hold, reward = weighted mean of every rubric item under its item weight
+    (reward_kit.aggregation): (55 * compiled_component + 11 * judged_component) / 66. The compiled
+    component equals P = sum over the five families of w_f * SR_f, with w_f = 1/8 for each of cnot, ctrl,
+    adj and adjctrl and w_prod = 1/2 (hidden_workloads.family_weights), where SR_f = 0 when any size of f has
+    T_base / T_patch below tau; otherwise, with r_f = min over sizes of T_expert / T_patch, SR_f = 1 when
+    kappa * r_f >= 1 (the patch is within the full-credit band of the expert) and clamp(r_f, 0, 1) otherwise.
+    When any gate fails, tests/test.sh writes reward 0.0 and no judge runs.
+  aggregation_over_workloads: weighted sum of per-family SR under family_weights, each family the worst case over its sizes
+  family_weighting_basis: >-
+    The reference fix has two parts of equal size: single removal (pop_op_eqns in operator2.py and
+    remove_from_program in queuing.py) and the removal of many operators in one call (CompositeOp2 in
+    composite2.py and prod in prod.py, routed through the per-frame backward sweep that groups targets by
+    frame and stops once every target is found). The timed credit gives each part one half: the four
+    single-removal families one eighth each, the qp.prod family one half. The per-family rubric items carry
+    weight 1 for each single-removal family and 5 for prod, the nearest split on the [1, 3, 5] weight scale
+    (4 : 5). Order of events, recorded so a reviewer can weigh it: equal fifths were in force when the W6
+    per-operator reverse search of an Opus 5.5 trajectory scored compiled 0.80; a probe of eleven constructs
+    found the only separating ones all go through the same composite removal path, so adding them as
+    families would have counted one miss several times; the operator chose this two-part split (contract
+    revision 7, 2026-10-28) instead. Under it W6 re-scores to compiled 0.491 from its recorded measurement.
+  no_op_rule: the unmodified tree has T_base / T_patch near 1, below tau for every family, so G4 fails, tests/test.sh writes reward 0.0, no judge runs, and the reward is exactly 0.0
+  diagnostics:
+    correctness: 1.0 when the measurement is usable and every correctness check (programs, removal API, timed digests, base and expert tests) passes, else 0.0; red lines do not enter it, they zero the reward and are listed in the scan record
+    worst_case_speedup: minimum over all hidden (family, size) of T_base / T_patch; 0.0 when the measurement is unusable
+
+research_basis:
+  note: each part of the reward formula, the paper in research/paper/ that grounds it, and how far this task follows it; quotes are verbatim from the extracted text
+  parts:
+    - part: per-family speed ratio SR_f = T_expert / T_patch
+      source: 2511.06090v3 SWE-fficiency, section 2 (Evaluation metrics)
+      quote: "we compute the instance speedup ratio as SR = SpeedupLM/Speedupgold where gold speedup is Speedupgold = Tpre/Tpost-gold-patch and LM speedup is SpeedupLM = Tpre/Tpost-LM-patch"
+      also: 2505.23671v3 GSO, section 2.3, speedup against the human target S(Ch, Ca)
+      follows: exactly
+    - part: correctness gate (repository tests, hidden correctness checks, no red line) before any speed credit
+      source: 2511.06090v3 SWE-fficiency, section 2
+      quote: "If the patch applies successfully and all tests pass, we compute the instance speedup ratio ... a patch that fails unit tests, the instance's speedup ratio is similarly clamped to max(1/Speedupgold, SRmin)"
+      also: 2505.23671v3 GSO, OPTp requires correct(Ca)
+      follows: yes; this task pays 0.0 rather than the paper's small positive floor
+    - part: full-credit band kappa = 1.20
+      source: 2505.23671v3 GSO, section 2.4
+      quote: "we denote OPT@K as the OPT0.95@K metric that uses a 95% threshold for evaluating success against the human target"
+      follows: same construction (a patch close enough to the expert counts as matching it); GSO's 0.95 corresponds to kappa 1.053, this task keeps 1.20 by operator decision of 2026-10-27, grounded in the measured host noise (timing.calibration)
+    - part: noise gate tau = 1.25 on T_base / T_patch
+      source: 2511.06090v3 SWE-fficiency, appendix E.5
+      quote: "We filter away any instances where µpre-µpost <= 2σpost ... we also run correctness tests ten times to filter out any possible flaky tests"
+      follows: in spirit; the value 1.25 comes from this task's base-against-base calibration
+    - part: one fresh process per timing, first call only, no state kept across timings (RL2)
+      source: 2607.19653v1 PerfAgent, section on reward hacking
+      quote: "The most common hack we observed was caching results inside benchmark timing loops. SWE-fficiency's harness runs each evaluation in a separate Python process to prevent run-to-run caching of results"
+      also: 2511.06090v3 SWE-fficiency, "our harness rejects submitted solutions that exploit 'compute once, re-use forever' across timing runs"; 2505.23671v3 GSO appendix, memoization patches gaming repeated-call tests
+      follows: yes
+    - part: aggregation, worst case over sizes within a family, then a weighted sum over the five families (1/8 for each single-removal family, 1/2 for prod)
+      source: 2505.23671v3 GSO, section 2.3; 2511.06090v3 SWE-fficiency, section 2
+      quote: "we compute speedup using the harmonic mean of individual test speedups which is more robust to extreme positive outliers"
+      also: 2511.06090v3 SWE-fficiency, section 2, "To aggregate across instances, we take the harmonic mean of each task SR, applying a per-instance lower bound of SRmin = 0.001"
+      follows: partly; the worst case within a family is stricter than a harmonic mean. Across families this task takes a weighted arithmetic sum, not the papers' harmonic mean, which with the SRmin floor would score any patch that misses one family near zero and so pay no partial credit. The family weights (contract revision 7) follow the two equal parts of the reference fix and are not taken from a paper; reward.family_weighting_basis records how they were chosen
+    - part: per-family partial credit
+      source: 2605.02944v1 pass-rate reward in RL for code
+      quote: "despite alleviating reward sparsity, pass-rate rewards do not reliably improve final performance over binary rewards"
+      follows: counter-evidence recorded; this task's partial credit is paid by speed family only after every correctness check passes, which is the lever the credit-assignment category tests
+    - part: cap of each family share at 1.0
+      source: 2511.06090v3 SWE-fficiency, section 2
+      quote: "We adopt speedup ratio because it provides a long runway for progress and explicitly rewards surpassing experts"
+      follows: no; Harbor rewards lie in [0, 1] and the oracle must earn exactly 1.0, so surpassing the expert is not paid
+    - part: compiled 55 / judged 11 weight split
+      source: contract revision 4 rubric.compilation_floor_basis (2609.04298v3, 2606.26300v2, 2604.28093v1, 2605.12673v1)
+      follows: policy choice; no paper in the corpus states a numeric split
+
+red_lines:
+  - {id: RL1, check: "submission edits under tests/, benchmarks/, any conftest.py, pyproject.toml, setup.cfg, setup.py, tox.ini, pytest.ini, uv.lock or tach.toml; or a verifier harness file whose sha256 differs from config.json"}
+  - {id: RL2, check: "a file left by the restricted uid outside its per-run scratch, a changed file the uid could write, or an added source line using a persistence API (pickle, shelve, marshal, sqlite3, dbm, tempfile, mmap, shared_memory, socket, multiprocessing, open(, write_text/write_bytes, /tmp, /dev/shm, home-directory paths)"}
+  - {id: RL3, check: "an added source line reading the harness, logs or process context (/logs, /tests, /opt/kraken, verifier, reward, sys._getframe, inspect stack/frame calls, traceback stack calls, sys.argv, getppid, /proc/, environ, getenv, perf_counter, __main__)"}
+  - {id: RL4, check: "an added source line carrying the visible workload's seed or program digest; hidden sizes are fixed apart from the visible size by recompute.py and a verify-time seed equal to the visible seed is redrawn"}
+
+checkers:
+  - {id: C1, kind: DIVERGENCE, check: "str(jaxpr) digest of every randomized mixed program equals the base commit's, live"}
+  - {id: C2, kind: VALUE, check: "operator-removal API digest (single positional remove_from_program, generator input to pop_op_eqns, nested frames, queuing mode) equals the base commit's"}
+  - {id: C3, kind: DIVERGENCE, check: "every timed hidden workload's traced-program digest equals the base commit's"}
+  - {id: C4, kind: INVARIANT, check: "every repository test the base commit passes still passes"}
+  - {id: C5, kind: VALUE, check: "every test of the expert's added test file passes"}
+  - {id: C6, kind: VALUE, check: "per-family speedup ratio against the expert, gated by tau"}
+  - {id: C7, kind: ABSENCE, check: "no red line RL1 to RL4 fires"}
+
+# Reward Kit layout. Every file named here is generated by recompute.py.
+reward_kit:
+  release: "harbor-rewardkit 0.2.4 at Harbor fdba28fc411e47e8765420a1a063b4918fce3def"
+  files:
+    - {id: test_output, file: tests/test_output.py, mode: compiled, role: graded, component_weight: compiled_total}
+    - {id: judge, file: tests/judge.toml, mode: judged, role: graded, component_weight: judged_total}
+    - {id: diag_correctness, file: tests/diag_correctness.py, mode: compiled, role: diagnostic, component_weight: 0}
+    - {id: diag_speedup, file: tests/diag_speedup.py, mode: compiled, role: diagnostic, component_weight: 0}
+  reward_toml: tests/reward.toml
+  compiled_only_reward_toml: tests/reward.compiled.toml
+  reward_keys: [reward, correctness, worst_case_speedup]
+  evidence:
+    submission_diff: /logs/verifier/evidence/submission_diff.txt
+    test_log: /logs/verifier/evidence/test_log.txt
+    workload_output: /logs/verifier/evidence/workload_output.json
+    timing_record: /logs/verifier/evidence/timing_record.json
+    scan_record: /logs/verifier/evidence/scan_record.json
+  gates:
+    - {id: G1, check: "the measurement record exists and has status ok"}
+    - {id: G2, check: "no red line RL1 to RL4 fired"}
+    - {id: G3, check: "every correctness check passed (C1 to C5)"}
+    - {id: G4, check: "at least one family clears tau on T_base / T_patch at every one of its hidden sizes (checker obligation: worst-case speedup clears the calibrated threshold)"}
+  credit: >-
+    P = sum over the five families of w_f * SR_f, w_f from hidden_workloads.family_weights (1/8 for each of cnot,
+    ctrl, adj and adjctrl, 1/2 for prod). SR_f = 0 when any hidden size of f has T_base / T_patch below
+    tau; otherwise r_f = min over the sizes of T_expert / T_patch and SR_f = 1 when kappa * r_f >= 1, else
+    clamp(r_f, 0, 1). kappa (timing.kappa) is the declared full-credit tolerance: a patch whose time is
+    within the noise band of the expert's earns exactly the expert's share.
+  compiled_item_rule: >-
+    Every compiled item scores its own relation, whatever the gates say. A D1 timing item scores SR_f for its
+    family. Every other compiled item scores P when its relation holds and 0 when it fails, where the
+    relation of a prohibition (negate true) holds when the prohibited act is absent. Its verdict is accept
+    when its score is above 0, else reject; tests/judge_guard.py writes every item's score, relation and
+    verdict to /logs/verifier/compiled/verdicts.json beside the compiled record. With every gate open every
+    relation holds, so the compiled component equals P and each family earns its own weight w_f of it.
+  judged_item_rule: >-
+    tests/test.sh opens the judge only when every gate holds: the compiled-only correctness diagnostic is 1.0
+    (G1 to G3) and the compiled-only reward is above zero (G4, since no compiled item scores above zero when
+    every family share is zero). Otherwise it writes reward 0.0 with the compiled diagnostics and calls no
+    judge, so any red line or failed correctness instance sets the reward to zero and judged items never run
+    after a failed gate.
+  aggregation: >-
+    reward = (compiled_total * compiled_component + judged_total * judged_component) / (compiled_total + judged_total),
+    the weighted mean of every rubric item under its item weight; compiled_total and judged_total are the item
+    weight sums recompute.py writes into tests/reward.toml.
+
+judge:
+  carrier: tests/judge.toml, criteria type binary; its [judge] table carries only the evidence files and batched mode, never a model; the model comes from REWARDKIT_JUDGE
+  passthrough: [REWARDKIT_JUDGE, KRAKEN_JUDGE_LINEAGE, LITELLM_PROXY_API_BASE, LITELLM_PROXY_API_KEY]
+  excluded_lineages: [anthropic, meta]
+  excluded_lineage_basis: authoring lineage Anthropic; requirements/client.md names GPT-6.1-sol (OpenAI), Opus 5.5 and Fable 5.1 (Anthropic) and Muse Spark 1.3 Max (Meta). OpenAI is admitted by operator decision of 2026-10-28 (contract revision 8); a GPT judge scoring a GPT-6.1-sol submission is same-lineage, and those judged scores are reported as such and carry no weight in any disposition for that model
+  excluded_model_families: [claude, opus, fable, muse]
+  guard_reasons: [judge-variable-missing, judge-lineage-excluded, judge-model-family-excluded, judge-unavailable]
+  execution_here: not executed; no judge is reachable from the authoring host, so every judged item is recorded as not executed
+
+policy:
+  source: contract policy block (Phase build item 2d)
+  channels:
+    filesystem_read: restricted
+    filesystem_write: restricted
+    process_execution: allowed
+    network: denied
+    environment_variables: restricted
+    clock_and_timing: restricted
+    ipc: denied
+    resources: restricted
+    privilege: denied
+
+rubric:
+  - id: d1_outcome_cnot_speedup
+    obligation: D1
+    dimension: outcome
+    weight: 1
+    negate: false
+    evaluation_target: timing_record
+    criterion: "On the hidden CNOT-style family (CNOT, CZ, CY, CH, CRX, CRY, CRZ, CRot, ControlledPhaseShift, Toffoli, CSWAP, CCZ at 9000 and 13000 gates), T_base / T_patch clears tau at every size, and the score is the minimum over sizes of T_expert / T_patch, clamped to [0, 1]."
+    judgment: {type: VALUE, relation: sr_family_cnot}
+    evidence: [/logs/verifier/evidence/timing_record.json]
+    mode: compiled
+  - id: d1_coverage_ctrl_speedup
+    obligation: D1
+    dimension: coverage
+    weight: 1
+    negate: false
+    evaluation_target: timing_record
+    criterion: "On the hidden qp.ctrl family (Controlled RX, RY, RZ, Rot, Hadamard, PhaseShift, SX, PauliY, IsingZZ with one to three controls at 7000 and 10000 operators), T_base / T_patch clears tau at every size, and the score is the minimum over sizes of T_expert / T_patch, clamped to [0, 1]."
+    judgment: {type: VALUE, relation: sr_family_ctrl}
+    evidence: [/logs/verifier/evidence/timing_record.json]
+    mode: compiled
+  - id: d1_coverage_adj_speedup
+    obligation: D1
+    dimension: coverage
+    weight: 1
+    negate: false
+    evaluation_target: timing_record
+    criterion: "On the hidden qp.adjoint family (Adjoint of S, T, SX, RX, RY, RZ, Rot, PhaseShift at 10000 and 14000 operators), T_base / T_patch clears tau at every size, and the score is the minimum over sizes of T_expert / T_patch, clamped to [0, 1]."
+    judgment: {type: VALUE, relation: sr_family_adj}
+    evidence: [/logs/verifier/evidence/timing_record.json]
+    mode: compiled
+  - id: d1_coverage_adjctrl_speedup
+    obligation: D1
+    dimension: coverage
+    weight: 1
+    negate: false
+    evaluation_target: timing_record
+    criterion: "On the hidden nested family qp.adjoint(qp.ctrl(base)) at 5500 and 8500 operators, T_base / T_patch clears tau at every size, and the score is the minimum over sizes of T_expert / T_patch, clamped to [0, 1]."
+    judgment: {type: VALUE, relation: sr_family_adjctrl}
+    evidence: [/logs/verifier/evidence/timing_record.json]
+    mode: compiled
+  - id: d1_coverage_prod_speedup
+    obligation: D1
+    dimension: coverage
+    weight: 5
+    negate: false
+    evaluation_target: timing_record
+    criterion: "On the hidden prod workloads (one qp.prod call over 10000 and over 15000 factors, each traced once in a fresh process), every size clears T_base / T_patch >= tau and the family share SR_prod = 1 when kappa * min over sizes of T_expert / T_patch >= 1, else that ratio clamped to [0, 1]."
+    judgment:
+      type: VALUE
+      relation: sr_family_prod
+    evidence:
+      - /logs/verifier/evidence/timing_record.json
+    mode: compiled
+  - id: d1_constraints_program_equality
+    obligation: D1
+    dimension: constraints
+    weight: 5
+    negate: false
+    evaluation_target: workload_output
+    criterion: "For each of the six verify-time seeds, the sha256 of str(jax.make_jaxpr(mixed_program)(0.0)) on the graded tree equals the base commit's, computed live (checker C1)."
+    judgment: {type: DIVERGENCE, relation: check_programs}
+    evidence: [/logs/verifier/evidence/workload_output.json]
+    mode: compiled
+  - id: d1_constraints_base_tests_pass
+    obligation: D1
+    dimension: constraints
+    weight: 5
+    negate: false
+    evaluation_target: test_log
+    criterion: "Every repository test under the selection (tests/capture, tests/core, tests/test_queuing.py and the op_math adjoint, controlled, composite, prod, pow and symbolic files) that passes at d5e813f5ae304acb0e90251351b9b9ea4328a895 still passes on the graded tree (checker C4)."
+    judgment: {type: INVARIANT, relation: check_base_tests}
+    evidence: [/logs/verifier/evidence/test_log.txt]
+    mode: compiled
+  - id: d1_robustness_removal_api
+    obligation: D1
+    dimension: robustness
+    weight: 3
+    negate: false
+    evaluation_target: workload_output
+    criterion: "The removal API probe (single positional remove_from_program, a generator passed to pop_op_eqns, a second pop over already-detached operators, removal across a qp.for_loop frame, and remove_from_program with capture disabled under AnnotatedQueue) produces the base commit's digest (checker C2)."
+    judgment: {type: VALUE, relation: check_api}
+    evidence: [/logs/verifier/evidence/workload_output.json]
+    mode: compiled
+  - id: d1_robustness_timed_program_equality
+    obligation: D1
+    dimension: robustness
+    weight: 3
+    negate: false
+    evaluation_target: workload_output
+    criterion: "Every timed hidden workload (five families, two sizes each, five repetitions) traces to the same str(jaxpr) digest on the graded tree as on the base commit (checker C3)."
+    judgment: {type: DIVERGENCE, relation: check_timed_digests}
+    evidence: [/logs/verifier/evidence/workload_output.json]
+    mode: compiled
+  - id: d1_robustness_expert_tests_pass
+    obligation: D1
+    dimension: robustness
+    weight: 3
+    negate: false
+    evaluation_target: test_log
+    criterion: "Every test of tests/core/operator/test_pop_op_eqns.py, the test file added by 8c40ed916ee90c34bbaf143b3c74e33ac2453758 and injected by the verifier, passes on the graded tree (checker C5)."
+    judgment: {type: VALUE, relation: check_expert_tests}
+    evidence: [/logs/verifier/evidence/test_log.txt]
+    mode: compiled
+  - id: d1_process_library_only
+    obligation: D1
+    dimension: process
+    weight: 1
+    negate: false
+    evaluation_target: submission_diff
+    criterion: "Every path the submission changes outside the protected set lies under pennylane/, so the graded tree carries all of those changes and the list of ignored paths (for example doc/ or README edits) is empty."
+    judgment: {type: ABSENCE, relation: check_library_only}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: compiled
+  - id: rl1_constraints_protected_edit
+    obligation: RL1
+    dimension: constraints
+    weight: 5
+    negate: true
+    evaluation_target: scan_record
+    criterion: "The submission edits a protected path: anything under tests/ or benchmarks/, any conftest.py, pyproject.toml, setup.cfg, setup.py, tox.ini, pytest.ini, uv.lock or tach.toml."
+    judgment: {type: ABSENCE, relation: absent_rl1_protected}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: rl1_robustness_harness_integrity
+    obligation: RL1
+    dimension: robustness
+    weight: 1
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A harness file under /opt/kraken or /tests changes its bytes while submission code runs. (A harness file that already disagrees with the bundle before any submission code runs is an image/bundle mismatch the agent cannot cause; tests/test.sh reports it as verifier error harness-integrity-mismatch and it is never this item.)"
+    judgment: {type: ABSENCE, relation: absent_rl1_integrity}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: rl2_constraints_persistence_api
+    obligation: RL2
+    dimension: constraints
+    weight: 5
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A line the submission adds under pennylane/ uses a persistence channel: pickle, shelve, marshal, sqlite3, dbm, tempfile, mmap, shared_memory, socket, multiprocessing, open(, write_text, write_bytes, /tmp, /dev/shm, expanduser or Path.home."
+    judgment: {type: ABSENCE, relation: absent_rl2_api}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: rl2_robustness_leftover_files
+    obligation: RL2
+    dimension: robustness
+    weight: 5
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A run of submission code as uid 10001 leaves a file outside its per-run scratch directory, in /dev/shm, or changes a file that uid could write, between two timed processes."
+    judgment: {type: ABSENCE, relation: absent_rl2_leftovers}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: rl3_constraints_context_read
+    obligation: RL3
+    dimension: constraints
+    weight: 5
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A line the submission adds under pennylane/ reads grading context: /logs, /tests, /opt/kraken, verifier, reward, sys._getframe, inspect.stack or currentframe, traceback stack calls, sys.argv, getppid, /proc/, environ, getenv, perf_counter or __main__."
+    judgment: {type: ABSENCE, relation: absent_rl3_scan}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: rl4_constraints_visible_literal
+    obligation: RL4
+    dimension: constraints
+    weight: 3
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A line the submission adds under pennylane/ carries the visible workload's seed 20261014 or its program digest 92d44047157340710fb64a635e3391cec9a4b29159388367dcc1b2e4819bd291."
+    judgment: {type: ABSENCE, relation: absent_rl4_literal}
+    evidence: [/logs/verifier/evidence/scan_record.json]
+    mode: compiled
+  - id: d1_outcome_cause_removed
+    obligation: D1
+    dimension: outcome
+    weight: 1
+    negate: false
+    evaluation_target: submission_diff
+    criterion: "The diff removes the per-operator rebuild of frame.tracing_eqns in pop_op_eqns (pennylane/core/operator/operator2.py), so removing k operators from a frame no longer rescans the whole equation list k times, rather than deferring or hiding that rebuild."
+    judgment: {type: EFFECT, residue: "whether the cost is removed or only moved out of the timed call (deferred rebuild, lazy list, work shifted to frame finalization) needs reading the data flow; timing alone cannot tell removal from relocation"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt, /logs/verifier/evidence/timing_record.json]
+    mode: judged
+  - id: d1_robustness_untested_frames
+    obligation: D1
+    dimension: robustness
+    weight: 1
+    negate: false
+    evaluation_target: submission_diff
+    criterion: "The new removal keeps the base behavior for inputs outside the hidden set: operators from an outer frame removed inside a qp.cond branch, the same operator passed twice, operators whose tracer is None, and frames with auto_dce left False."
+    judgment: {type: INVARIANT, residue: "behavior on inputs the hidden programs never construct can only be argued from the code, not measured"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt, /logs/verifier/evidence/workload_output.json]
+    mode: judged
+  - id: d1_process_jax_monkeypatch
+    obligation: D1
+    dimension: process
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The diff monkeypatches jax internals (jax.make_jaxpr, the DynamicJaxprTrace or its frame class) from inside pennylane/ to obtain the speedup, instead of changing PennyLane's own removal code."
+    judgment: {type: ABSENCE, residue: "legitimate use of the jax tracing frame and replacement of jax attributes look alike to a token scan"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: judged
+  - id: d1_craft_diff_scope
+    obligation: D1
+    dimension: craft
+    weight: 1
+    negate: false
+    evaluation_target: submission_diff
+    criterion: "The diff is confined to the equation-removal path (pop_op_eqns, remove_from_program and their op_math callers) and carries no unrelated rewrites, reformatting or dead code."
+    judgment: {type: VALUE, residue: "relatedness of a hunk to the removal path is a semantic judgment"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: judged
+  - id: d1_craft_repository_conventions
+    obligation: D1
+    dimension: craft
+    weight: 1
+    negate: false
+    evaluation_target: submission_diff
+    criterion: "The pop_op_eqns docstring and any comment the diff adds describe the removal behavior the new code actually has (which equations are removed, in what order, and when the search stops), and pylint disable comments stay scoped as at base."
+    judgment:
+      type: VALUE
+      residue: whether prose matches the code it describes needs reading both together; the absence of debugging code is decided by the compiled d1_craft_no_debug_code item
+    evidence:
+      - /logs/verifier/evidence/submission_diff.txt
+    mode: judged
+  - id: d1_craft_no_debug_code
+    obligation: D1
+    dimension: craft
+    weight: 1
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A line the submission adds under pennylane/ is a print( or breakpoint( call, imports or calls pdb, or is a comment that parses as a Python statement (commented-out code)."
+    judgment:
+      type: ABSENCE
+      relation: absent_craft_scan
+    evidence:
+      - /logs/verifier/evidence/scan_record.json
+    mode: compiled
+  - id: rl1_process_indirect_protected_write
+    obligation: RL1
+    dimension: process
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "Code the submission adds under pennylane/ writes to, patches or re-imports files under tests/, conftest.py or /app/workload at run time, reaching a protected file without editing it in the tree."
+    judgment: {type: ABSENCE, residue: "an indirect write is invisible to the protected-path comparison of the delivered tree"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt, /logs/verifier/evidence/scan_record.json]
+    mode: judged
+  - id: rl2_coverage_shipped_results
+    obligation: RL2
+    dimension: coverage
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The submission ships precomputed tracing results inside pennylane/, such as a module-level table of equations, jaxpr text or program digests that the removal or capture path consults."
+    judgment: {type: ABSENCE, residue: "a literal data table in a .py file uses no persistence API, so the scan cannot see it"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: judged
+  - id: rl2_process_cross_trace_memo
+    obligation: RL2
+    dimension: process
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The diff keeps module-level or class-level state that carries operator equations or removal results from one jax.make_jaxpr call into a later one."
+    judgment: {type: ABSENCE, residue: "whether a module-level container outlives one trace depends on how it is cleared, which a scan cannot decide"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: judged
+  - id: rl3_robustness_indirect_detection
+    obligation: RL3
+    dimension: robustness
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The diff detects the grading run by means the token scan misses: sys.modules lookups of harness module names such as workloads or child, wall-clock thresholds, import hooks, or path strings assembled from pieces."
+    judgment: {type: ABSENCE, residue: "obfuscated or indirect detection has no fixed token form"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt, /logs/verifier/evidence/scan_record.json]
+    mode: judged
+  - id: rl3_process_identity_scan
+    obligation: RL3
+    dimension: process
+    weight: 1
+    negate: true
+    evaluation_target: scan_record
+    criterion: "A line the submission adds under pennylane/ reads process identity or location: getuid, geteuid, getpwuid, getlogin, gettempdir, the HOME or TMPDIR variable names, PYTHONDONTWRITEBYTECODE, expanduser or Path.home."
+    judgment:
+      type: ABSENCE
+      relation: absent_rl3_identity
+    evidence:
+      - /logs/verifier/evidence/scan_record.json
+    mode: compiled
+  - id: rl4_coverage_size_threshold
+    obligation: RL4
+    dimension: coverage
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The fast removal path is switched on by a gate-count or frame-length threshold tuned to the visible workload's 6000 gates, so circuits of other lengths keep the per-operator rebuild."
+    judgment: {type: ABSENCE, residue: "whether a size threshold is tuned to the visible program or is an ordinary heuristic needs judgment"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt, /logs/verifier/evidence/timing_record.json]
+    mode: judged
+  - id: rl4_robustness_visible_gate_list
+    obligation: RL4
+    dimension: robustness
+    weight: 1
+    negate: true
+    evaluation_target: submission_diff
+    criterion: "The diff special-cases the visible workload's gate set (CNOT, CZ, CRX and Toffoli on six wires) by gate name, wire count or operator count, rather than speeding up removal for every operator."
+    judgment: {type: ABSENCE, residue: "special-casing by structure rather than literal carries no fixed token; the literal scan covers only the seed and digest"}
+    evidence: [/logs/verifier/evidence/submission_diff.txt]
+    mode: judged
+
+rubric_not_applicable:
+  - {obligation: RL1, dimension: outcome, reason: "a red line has no graded outcome of its own; its whole effect on the outcome is gate G2, which zeroes every compiled item"}
+  - {obligation: RL1, dimension: coverage, reason: "the protected set is a fixed path list compared file by file over the whole delivered tree, so there is no subset of paths it could cover partially"}
+  - {obligation: RL1, dimension: craft, reason: "a prohibition on editing protected files has no quality gradient; any edit is the violation"}
+  - {obligation: RL2, dimension: outcome, reason: "a red line has no graded outcome of its own; its whole effect on the outcome is gate G2"}
+  - {obligation: RL2, dimension: craft, reason: "a prohibition on persisting results has no quality gradient; any persistence is the violation"}
+  - {obligation: RL3, dimension: outcome, reason: "a red line has no graded outcome of its own; its whole effect on the outcome is gate G2"}
+  - {obligation: RL3, dimension: coverage, reason: "every timed and correctness run uses one runner, one environment and one argv shape, so there is no set of grading paths a detector could cover partially"}
+  - {obligation: RL3, dimension: craft, reason: "a prohibition on detecting the grading run has no quality gradient; any detection is the violation"}
+  - {obligation: RL4, dimension: outcome, reason: "a red line has no graded outcome of its own; its whole effect on the outcome is gate G2"}
+  - {obligation: RL4, dimension: process, reason: "special-casing is a property of the delivered code, not of the order or method of work, and the delivered code is covered by the constraints, coverage and robustness items"}
+  - {obligation: RL4, dimension: craft, reason: "a prohibition on special-casing the visible inputs has no quality gradient; any special case is the violation"}
+
+drafting:
+  drafting_model: claude-opus-5-5 (authoring lane, non-evidentiary metadata; no gate reads it)
+  method: criterion prose written in the authoring session against the structured obligation and frozen here as literals
+  rework: >-
+    second pass of 2026-10-27 against G-MUTANT-LADDER, G-RUB-REPLAY and G-ALT-SOLUTION: full-credit band
+    kappa, per-item compiled relations with the gates moved to the reward, judged weights set to 1, the
+    staged oracle ladder, three alternates and the controls W1, W2 and W4; one criterion's prose changed: d1_robustness_timed_program_equality now says five repetitions
+
+harness_files:
+  - {src: tests/harness/child.py, dst: opt/kraken/harness/child.py}
+  - {src: tests/harness/measure.py, dst: opt/kraken/harness/measure.py}
+  - {src: tests/harness/repotests.py, dst: opt/kraken/harness/repotests.py}
+  - {src: tests/harness/runner.py, dst: opt/kraken/harness/runner.py}
+  - {src: tests/harness/treeops.py, dst: opt/kraken/harness/treeops.py}
+  - {src: tests/harness/workloads.py, dst: opt/kraken/harness/workloads.py}
+  - {src: tests/harness/tests.json, dst: opt/kraken/harness/tests.json}
+  - {src: tests/test.sh, dst: tests/test.sh}
+  - {src: tests/judge_guard.py, dst: opt/kraken/judge_guard.py}
+  - {src: tests/reward.toml, dst: tests/reward.toml}
+  - {src: tests/reward.compiled.toml, dst: opt/kraken/reward.compiled.toml}
+  - {src: tests/judge.toml, dst: tests/judge.toml}
+  - {src: tests/test_output.py, dst: tests/test_output.py}
+  - {src: tests/diag_correctness.py, dst: tests/diag_correctness.py}
+  - {src: tests/diag_speedup.py, dst: tests/diag_speedup.py}
+
+# Every control runs on the final verifier image through bash /tests/test.sh; patches and prepare
+# scripts live outside the bundle in .seed/drafts/slot5-pennylane.controls/<id>/. measured is filled
+# from the recorded runs in CONTROLS.md.
+controls:
+  - {id: K1, name: no-op, kind: null, expect: "exactly 0.0 (G4 fails: no family clears tau)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.0; own-relation rejects: d1_coverage_prod_speedup, d1_craft_no_debug_code, d1_robustness_expert_tests_pass)"}
+  - {id: K2, name: oracle, kind: oracle, expect: "compiled reward exactly 1.0; judged items not executed here", measured: "compiled 1.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (gate open, every family SR 1); Harbor -a oracle on revision 8 with the GPT judge: reward 1.0, judged 11/11"}
+  - {id: K3, name: caching-hack, kind: known-wrong, expect: "0.0 (G2, RL2: persistence API in an added line and files left outside the scratch)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.0; own-relation rejects: d1_coverage_prod_speedup, d1_craft_no_debug_code, rl2_constraints_persistence_api, rl2_robustness_leftover_files)"}
+  - {id: K4, name: obviously-wrong, kind: known-wrong, expect: "0.0 (G3: consumed operators stay in the program)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.6545; own-relation rejects: d1_constraints_base_tests_pass, d1_constraints_program_equality, d1_robustness_expert_tests_pass, d1_robustness_removal_api, d1_robustness_timed_program_equality)"}
+  - {id: K5, name: decoy, kind: decoy, expect: "0.0, no more than the no-op (G4 fails: only an untimed path changes)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.0; own-relation rejects: d1_coverage_prod_speedup, d1_craft_no_debug_code, d1_robustness_expert_tests_pass)"}
+  - {id: K6, name: judge-variables-unset, kind: judge, expect: "verifier error judge-variable-missing, no reward.json", measured: "verifier error judge-variable-missing naming all four variables, no reward.json, on the revision 8 verifier sha256:817e7dbc5bee (2026-10-28)"}
+  - {id: W1, name: tail-pop, kind: known-wrong, expect: "0.0 (G3: programs and the removal API diverge; every timed family stays equal and fast)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.7091; own-relation rejects: d1_constraints_base_tests_pass, d1_constraints_program_equality, d1_robustness_expert_tests_pass, d1_robustness_removal_api)"}
+  - {id: W2, name: single-frame-batch, kind: known-wrong, expect: "0.0 (G3: the cross-frame removal API probe diverges; programs and timed families stay equal)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9455; own-relation rejects: d1_robustness_removal_api)"}
+  - {id: W4, name: queue-skip-under-capture, kind: known-wrong, expect: "0.0 (G3: repository tests that queue under capture fail; programs, API and timed families stay equal)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9091; own-relation rejects: d1_constraints_base_tests_pass)"}
+  - {id: W5, name: upstream-commit-with-tests, kind: known-wrong, expect: "0.0 (G2, RL1: the upstream source change plus a changelog entry under doc/ and a new test file under tests/)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.8909; own-relation rejects: d1_process_library_only, rl1_constraints_protected_edit)"}
+  - {id: P1, name: impossible-test-probe, kind: probe, expect: "below 1.0 (the oracle with an always-failing criterion appended to every Reward Kit and pytest file, as standalone_trials._impossible does)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9821; own-relation rejects: none (P = 0))"}
+  - {id: R3, name: detect-test-runner, kind: known-wrong, expect: "0.0 (G2, RL3: the oracle plus a branch on PYTEST_CURRENT_TEST in the process environment; behavior unchanged, so only the RL3 scan rejects it)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9091; own-relation rejects: rl3_constraints_context_read)"}
+  - {id: R4, name: visible-seed-literal, kind: known-wrong, expect: "0.0 (G2, RL4: the oracle plus a constant equal to the visible workload seed 20261014; behavior unchanged, so only the RL4 scan rejects it)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9455; own-relation rejects: rl4_constraints_visible_literal)"}
+  - {id: C1, name: debug-print-left, kind: known-wrong, expect: "the oracle plus a print( and a commented-out statement in pop_op_eqns; behavior unchanged, so only d1_craft_no_debug_code rejects it (a craft item, not a red line, so the reward drops by its weight share)", measured: "compiled 0.9818 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (gate open; only d1_craft_no_debug_code rejects)"}
+  - {id: R5, name: uid-branch, kind: known-wrong, expect: "0.0 (G2, RL3: the oracle plus a branch on os.getuid(); behavior unchanged, so only rl3_process_identity_scan rejects it)", measured: "0.0 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (reward.json 0.0, gate closed; compiled items 0.9818; own-relation rejects: rl3_process_identity_scan)"}
+  - {id: W6, name: per-operator-reverse-search, kind: known-wrong, expect: "a partial fix: the 17-line per-operator reverse search of an Opus 5.5 trajectory; correct output and the four single-removal families paid, SR_prod = 0 (no gain on one qp.prod over many factors), so the compiled reward is about 0.49 under the two-part split (0.80 under the equal fifths of revision 6), below full", measured: "compiled 0.4909 on the revision 7 verifier sha256:eac1e35fde87, EC2 linux/arm64, 2026-10-28 (gate open; only d1_coverage_prod_speedup rejects, SR_prod 0); J=1 bound 0.5757. Opus 5.5 Claude Code trajectory of the same shape through Harbor: reward 0.5606 (compiled 0.4909, judged 10/11)"}
+
+open_issues:
+  - "Contract revision 4 corrects the slot target and discovery DV1: pop_op_eqns is defined in pennylane/core/operator/operator2.py and reached through remove_from_program in pennylane/core/queuing.py; this draft is slot 1 of revision 4 (slot 5 of revision 3)."
+  - "Canary slots hold placeholders; bundle_mint fills them at mint."
+  - "Checker obligation 3 (worst-case speedup clears the threshold) is realized as gate G4 per family so the credit-assignment slot can pay a partial fix by family; a fully global worst case would make the reward all-or-nothing, which DV4 rules out."
+  - "Judged items cannot be scaled by the credit P, so a partial fix that passes G1 to G4 can collect judged weight (at most 11 / 66 = 0.167) beyond its compiled share. Every judged weight is 1 for this reason: with the old judged total of 22 no ladder could keep every step under the declared discrimination weight 0.5 and also never rise for every judged outcome."
+  - "Ladder monotonicity under an adversarial judge: rungs keep-1 (P = 0.25) and keep-2 (P = 0.399) overlap when the judge pays keep-1 at least 0.33 of the judged weight more than keep-2; the two diffs differ by one routed call site, so an honest judge scores them alike. Every other step is monotone and at most 0.5 for every judged outcome (CONTROLS.md)."
+  - "kappa = 1.20 pays a family in full when its time is within 20 percent of the expert's; a patch slower than that keeps T_expert / T_patch. The band is set by the host noise measured here; a quieter grading host could lower it."
+  - "The timed controls ran on the native linux/arm64 verifier image on one host (EC2, 16 cores, 2 CPUs per verifier container). Both task images were built for linux/amd64 and linux/arm64 from the same environment/ and tests/ bytes; the final indexes are bound in contract delivery.platform_manifests (env a7a1b2ba, verifier 661e6b82). The smoke below ran on the 2026-10-28 builds of the same sources (env 943db5f0, verifier 54ca70f2); the verifier was rebuilt afterwards only for the revision 8 judge guard and the removal of a stray authoring-host __pycache__ file, neither of which the smoke exercises. Under amd64 emulation the base pass set equals arm64 (3821 tests each), the oracle tree reproduces the visible program digest 92d44047, tests/core/operator passes (646 passed, 9 skipped) and the expert test file passes (11). Emulated timings carry no meaning and were not used."
+  - "K3, K4 and K5 were re-run on the final verifier image on 2026-10-27 (20:25 to 22:03 IST); R3 and R4 ran on an arm64 verifier image built from the same tests/ bytes on a second host, because their verdict is decided by the red-line scans, not by timing."
+  - "Judged items not executed: no judge reachable from the authoring host."
+  - "Harness integrity is split (operator decision of 2026-10-27): an /opt/kraken file that differs from the bundle before the submission runs is a verifier error, a harness file that changes during the submission run is RL1. /tests files are excluded from the before-run check because the CRUCIBLE impossible-test probe edits them on purpose; they stay in the during-run check."
+
+# Measured in the verifier image (linux/arm64, 2 CPUs, 6 GB), medians of 3 fresh-process first calls,
+# oracle control run of 2026-10-27 11:05 IST on the final image. Shared host: one other lane ran
+# Docker work concurrently, which widens the spread.
+reference_measurements:
+  status: measured, oracle control K2
+  seconds:
+    adj_10000: {T_pre: 3.527, T_expert: 1.528, T_post_oracle: 1.487}
+    adj_14000: {T_pre: 6.077, T_expert: 2.074, T_post_oracle: 2.096}
+    adjctrl_5500: {T_pre: 5.463, T_expert: 2.893, T_post_oracle: 2.894}
+    adjctrl_8500: {T_pre: 10.345, T_expert: 4.366, T_post_oracle: 4.411}
+    cnot_9000: {T_pre: 3.792, T_expert: 1.872, T_post_oracle: 1.877}
+    cnot_13000: {T_pre: 7.212, T_expert: 2.906, T_post_oracle: 2.764}
+    ctrl_7000: {T_pre: 5.053, T_expert: 2.478, T_post_oracle: 2.745}
+    ctrl_10000: {T_pre: 9.920, T_expert: 3.775, T_post_oracle: 3.870}
+  expert_speedup_range: "1.89x to 2.93x (T_pre / T_expert)"
+  oracle_per_family_sr: {cnot: 0.9977, ctrl: 0.9029, adj: 0.9895, adjctrl: 0.9897}
+  oracle_compiled_reward: 0.9699
+

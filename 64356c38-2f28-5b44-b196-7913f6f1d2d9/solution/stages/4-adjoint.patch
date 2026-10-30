@@ -1,0 +1,24 @@
+diff --git a/pennylane/ops/op_math/adjoint.py b/pennylane/ops/op_math/adjoint.py
+--- a/pennylane/ops/op_math/adjoint.py
++++ b/pennylane/ops/op_math/adjoint.py
+@@ -28,7 +28,10 @@
+ from pennylane.capture.custom_primitives import QpPrimitive
+ from pennylane.compiler import compiler
+ from pennylane.core.operator import Operation, Operator, Operator2
+-from pennylane.core.operator.operator2 import pop_op_eqns  # tach-ignore
++from pennylane.core.operator.operator2 import (  # tach-ignore
++    _pop_op_eqns_backward,
++    pop_op_eqns,
++)
+ from pennylane.core.queuing import QueuingManager
+ from pennylane.exceptions import PennyLaneDeprecationWarning
+ from pennylane.math import conj, moveaxis, transpose
+@@ -506,7 +509,7 @@
+ 
+ def _make_adjoint_op(op: Operator) -> Adjoint | Adjoint2:
+     if isinstance(op, Operator2):
+-        _ = pop_op_eqns((op,))
++        _ = _pop_op_eqns_backward((op,))
+         return Adjoint2(op)
+ 
+     return Adjoint(op)

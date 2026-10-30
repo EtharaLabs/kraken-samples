@@ -1,0 +1,26 @@
+{
+ "f2p_test": "tests/core/operator/test_pop_op_eqns.py",
+ "pytest_timeout_sec": 1800,
+ "runner_uid": 10001,
+ "test_ignore": [
+  "tests/capture/autograph"
+ ],
+ "test_selection": [
+  "tests/capture",
+  "tests/core",
+  "tests/test_queuing.py",
+  "tests/ops/op_math/test_adjoint.py",
+  "tests/ops/op_math/test_adjoint2.py",
+  "tests/ops/op_math/test_controlled.py",
+  "tests/ops/op_math/test_controlled2.py",
+  "tests/ops/op_math/test_controlled_ops.py",
+  "tests/ops/op_math/test_composite2.py",
+  "tests/ops/op_math/test_composite_op2_capture.py",
+  "tests/ops/op_math/test_prod.py",
+  "tests/ops/op_math/test_prod2.py",
+  "tests/ops/op_math/test_pow2.py",
+  "tests/ops/op_math/test_symbolic_op2.py",
+  "tests/ops/op_math/test_symbolic_op2_capture.py",
+  "tests/ops/op_math/test_change_op_basis2.py"
+ ]
+}

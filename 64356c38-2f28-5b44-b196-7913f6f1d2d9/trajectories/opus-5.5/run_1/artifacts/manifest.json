@@ -1,0 +1,25 @@
+[
+  {
+    "source": "/logs/artifacts",
+    "destination": "artifacts/logs/artifacts",
+    "type": "directory",
+    "status": "ok",
+    "service": null,
+    "exclude": []
+  },
+  {
+    "source": "/app/pennylane",
+    "destination": "artifacts/app/pennylane",
+    "type": "directory",
+    "status": "ok",
+    "service": null,
+    "exclude": [
+      ".git",
+      "__pycache__",
+      "*.pyc",
+      ".pytest_cache",
+      "*.egg-info",
+      "build"
+    ]
+  }
+]

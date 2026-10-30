@@ -1,0 +1,25 @@
+# GENERATED SECTION. DO NOT HAND-EDIT.
+
+[scoring.test_output]
+aggregation = "weighted-mean"
+
+[scoring.diag_correctness]
+aggregation = "weighted-mean"
+
+[scoring.diag_speedup]
+aggregation = "weighted-mean"
+
+[[reward]]
+name = "reward"
+aggregation = "weighted-mean"
+weights = { test_output = 55.0, judge = 11.0, diag_correctness = 0.0, diag_speedup = 0.0 }
+
+[[reward]]
+name = "correctness"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, judge = 0.0, diag_correctness = 1.0, diag_speedup = 0.0 }
+
+[[reward]]
+name = "worst_case_speedup"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, judge = 0.0, diag_correctness = 0.0, diag_speedup = 1.0 }

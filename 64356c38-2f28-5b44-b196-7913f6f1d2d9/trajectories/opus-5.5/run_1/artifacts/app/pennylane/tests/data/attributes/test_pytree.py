@@ -1,0 +1,189 @@
+# Copyright 2018-2023 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Tests for the ``DatasetPyTree`` attribute type.
+"""
+
+from dataclasses import dataclass
+
+import pytest
+
+import pennylane as qp
+from pennylane.data import Dataset, DatasetPyTree
+from pennylane.data.attributes.pytree import _storable_as_array
+from pennylane.pytrees.pytrees import (
+    _register_pytree_with_pennylane,
+    flatten_registrations,
+    type_to_typename,
+    typename_to_type,
+    unflatten_registrations,
+)
+
+
+@dataclass
+class CustomNode:
+    """Example Pytree for testing."""
+
+    def __init__(self, data, metadata):
+        self.data = data
+        self.metadata = metadata
+
+
+def flatten_custom(node):
+    return (node.data, node.metadata)
+
+
+def unflatten_custom(data, metadata):
+    return CustomNode(data, metadata)
+
+
+@pytest.fixture(autouse=True)
+def register_test_node():
+    """Fixture that temporarily registers the ``CustomNode`` class as
+    a Pytree."""
+    # Use this instead of ``register_pytree()`` so that ``CustomNode`` will not
+    # be registered with jax.
+    _register_pytree_with_pennylane(CustomNode, "test.CustomNode", flatten_custom, unflatten_custom)
+
+    yield
+
+    del flatten_registrations[CustomNode]
+    del unflatten_registrations[CustomNode]
+    del typename_to_type[type_to_typename[CustomNode]]
+    del type_to_typename[CustomNode]
+
+
+class TestDatasetPyTree:
+    """Tests for ``DatasetPyTree``."""
+
+    def test_consumes_type(self):
+        """Test that PyTree-compatible types that are not builtin are
+        consumed by ``DatasetPyTree``."""
+        dset = Dataset()
+        dset.attr = CustomNode([1, 2, 3, 4], {"meta": "data"})
+
+        assert isinstance(dset.attrs["attr"], DatasetPyTree)
+
+    @pytest.mark.parametrize("obj", [[1, 2], {"a": 1}, (1, 2)])
+    def test_builtins_not_consumed(self, obj):
+        """Test that built-in containers like dict, list and tuple are
+        not consumed by the ``DatasetPyTree`` type."""
+
+        dset = Dataset()
+        dset.attr = obj
+
+        assert not isinstance(dset.attrs["attr"], DatasetPyTree)
+
+    def test_value_init(self):
+        """Test that ``DatasetPyTree`` can be initialized from a value."""
+
+        value = CustomNode(
+            [{"a": 1}, (3, 5), [7, 9, {"x": CustomNode("data", None)}]], {"meta": "data"}
+        )
+        attr = DatasetPyTree(value)
+
+        assert attr.type_id == "pytree"
+        assert attr.get_value() == value
+
+    def test_bind_init(self):
+        """Test that a ``DatasetPyTree`` can be bind-initialized."""
+
+        value = CustomNode(
+            [{"a": 1}, (3, 5), [7, 9, {"x": CustomNode("data", None)}]], {"meta": "data"}
+        )
+        bind = DatasetPyTree(value).bind
+
+        attr = DatasetPyTree(bind=bind)
+
+        assert attr == value
+
+    def test_string_leaves_preserved(self):
+        """Test that string leaves are restored as strings rather than bytes.
+
+        Homogeneous string leaves (e.g. string wire labels) were stored as an
+        array, which HDF5 reads back as ``bytes``. They must be stored as a list
+        so that they round-trip as ``str``.
+        """
+        value = CustomNode(["a", "b"], {"meta": "data"})
+
+        result = DatasetPyTree(value).get_value()
+
+        assert list(result.data) == ["a", "b"]
+        assert all(isinstance(leaf, str) for leaf in result.data)
+
+    def test_inhomogeneous_numeric_leaves(self):
+        """Test that ragged (inhomogeneous) numeric leaves round-trip.
+
+        ``np.asarray`` raises on leaves with inhomogeneous shapes (e.g. a scalar
+        coefficient alongside a matrix, as in a ``Hamiltonian`` with a ``Hermitian``
+        term), so they must fall back to being stored as a list rather than an array.
+        """
+        matrix = qp.math.array([[1.0, 2.0], [3.0, 4.0]])
+        value = CustomNode([1.0, matrix], {"meta": "data"})
+
+        result = DatasetPyTree(value).get_value()
+
+        assert result.data[0] == 1.0
+        assert qp.math.allequal(result.data[1], matrix)
+
+    def test_bytes_leaves_preserved(self):
+        """Test that ``bytes`` leaves round-trip as ``bytes`` rather than being
+        coerced to another type when stored as a list."""
+        value = CustomNode([b"abc", b"de"], {"meta": "data"})
+
+        result = DatasetPyTree(value).get_value()
+
+        assert list(result.data) == [b"abc", b"de"]
+        assert all(isinstance(leaf, bytes) for leaf in result.data)
+
+    @pytest.mark.torch
+    def test_non_numpy_leaves_do_not_raise(self):
+        """Test that the array/list decision does not call ``np.asarray`` on non-numpy
+        leaves (e.g. a ``torch`` tensor that requires grad), which would raise."""
+        leaf = qp.math.asarray([1.0, 2.0], like="torch", requires_grad=True)
+
+        assert _storable_as_array([leaf]) is False
+
+    @pytest.mark.parametrize(
+        "op, expected_wires, expected_types",
+        [
+            (qp.RZ(0.5, wires=0), [0], [int]),
+            (qp.RZ(0.5, wires="a"), ["a"], [str]),
+            (qp.CNOT(wires=[0, 1]), [0, 1], [int, int]),
+            (qp.Rot(0.1, 0.2, 0.3, wires=2), [2], [int]),
+        ],
+    )
+    def test_wire_labels_are_native_python(self, op, expected_wires, expected_types):
+        """Test that wire labels round-trip as native Python scalars rather than numpy types."""
+        result = DatasetPyTree(op).get_value()
+
+        qp.assert_equal(result, op)
+        assert list(result.wires) == expected_wires
+        assert [type(w) for w in result.wires] == expected_types
+
+    def test_integer_wire_not_promoted_by_float_parameter(self):
+        """Test that an integer wire label is not dtype-promoted to a float by a float parameter
+        sharing the leaf storage."""
+        result = DatasetPyTree(qp.RZ(0.5, wires=0)).get_value()
+
+        assert result.wires[0] == 0
+        assert isinstance(result.wires[0], int)
+
+
+@pytest.mark.parametrize("shots", [None, 1, [1, 2]])
+def test_quantum_scripts(shots):
+    """Test that ``QuantumScript`` can be serialized as Pytrees."""
+    script = qp.tape.QuantumScript([qp.X(0)], shots=shots)
+
+    qp.assert_equal(DatasetPyTree(script).get_value(), script)

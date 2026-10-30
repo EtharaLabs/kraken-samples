@@ -1,0 +1,6 @@
+21:39:26 - LiteLLM:WARNING: get_model_cost_map.py:318 - LiteLLM: model cost map fetch attempt 1/3 failed (ConnectError fetching https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: [Errno -3] Temporary failure in name resolution); retrying in 2.9s
+21:39:26 - LiteLLM:WARNING: get_model_cost_map.py:675 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: ConnectError fetching https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: [Errno -3] Temporary failure in name resolution. Falling back to local backup.
+21:39:29 - LiteLLM:WARNING: get_model_cost_map.py:318 - LiteLLM: model cost map fetch attempt 2/3 failed (ConnectError fetching https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: [Errno -3] Temporary failure in name resolution); retrying in 5.0s
+reward: 0.4909
+correctness: 1.0
+worst_case_speedup: 0.8859

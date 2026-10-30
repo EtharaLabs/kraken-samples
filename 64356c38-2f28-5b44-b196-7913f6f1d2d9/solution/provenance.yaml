@@ -1,0 +1,38 @@
+# FORGE-CANARY-BEGIN
+# FORGE-CANARY-SLOT-1: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-SLOT-2: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-SLOT-3: 0000000000000000000000000000000000000000000000000000000000000000
+# FORGE-CANARY-END
+# GENERATED SECTION. DO NOT HAND-EDIT.
+attestations:
+  ancestry_attestation_digest: attestation-unavailable
+  ancestry_attestation_signer: attestation-unavailable
+  event_attestation_digest: attestation-unavailable
+  event_attestation_signer: attestation-unavailable
+cap: HOLD:PILOT_REQUIRED
+generated: GENERATED SECTION. DO NOT HAND-EDIT.
+no_upstream_lift: true
+origin: original
+provenance_date: '2026-10-26'
+run_id: forge-ankit-ethara-ethara-ai-20261026t134628z-b5ea82
+schema: trinity.provenance/v1
+screening:
+  roots: unresolved, FORGE_VIEW screening_roots null
+  screening_expires_at: unresolved
+  screening_interval_days: unresolved
+  screening_measured_at: unresolved
+slot: 5
+source:
+  base_commit_committed_at: '2026-10-14T16:26:14Z'
+  base_commit_sha: d5e813f5ae304acb0e90251351b9b9ea4328a895
+  canonical_identity: github.com/PennyLaneAI/pennylane
+  fork_ancestry_snapshot_digest: 3f733efea31713f3a6fb87a1883b90418747dba0082bbcc441554bd731b0a1fe
+  host_numeric_id: 129936360
+  license: Apache-2.0
+  license_source: host API spdx_id
+  reference_fix_commit: 8c40ed916ee90c34bbaf143b3c74e33ac2453758
+  task_generating_event: performance pull request opened, pennylane pull request 10298, merged as commit 8c40ed916ee90c34bbaf143b3c74e33ac2453758 on 2026-10-14T19:34:27Z
+  task_generating_event_timestamp: '2026-10-08T18:35:24Z'
+source_kind: public_repository
+binding:
+  canonical_bundle_hash: 56cd1787d4ed861d790ae5fecea5d23c36dd15dcc2487d268bbe4f422fd50bf3
