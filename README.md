@@ -2,9 +2,9 @@
 
 # Kraken: samples
 
-<p align="center"><b>The samples lane: 1 of 30 Harbor task bundles.</b></p>
+<p align="center"><b>The samples lane: 0 of 30 Harbor task bundles.</b></p>
 
-<p align="center"><a href="#summary"><img src="https://img.shields.io/badge/bundles-1_of_30-845EF7" alt="bundles: 1 of 30"></a> <a href="#evidence-status"><img src="https://img.shields.io/badge/sealed-1-845EF7" alt="sealed: 1"></a> <a href="#difficulty-tiers"><img src="https://img.shields.io/badge/difficulty-measured-845EF7" alt="difficulty: measured"></a></p>
+<p align="center"><a href="#summary"><img src="https://img.shields.io/badge/bundles-0_of_30-845EF7" alt="bundles: 0 of 30"></a> <a href="#evidence-status"><img src="https://img.shields.io/badge/sealed-0-845EF7" alt="sealed: 0"></a> <a href="#difficulty-tiers"><img src="https://img.shields.io/badge/difficulty-measured-845EF7" alt="difficulty: measured"></a></p>
 
 <p align="center"><sub><a href="#abstract">Abstract</a> | <a href="#summary">Summary</a> | <a href="#difficulty-tiers">Difficulty tiers</a> | <a href="#evidence-status">Evidence status</a> | <a href="#coverage">Coverage</a> | <a href="#dataset-structure">Dataset structure</a> | <a href="#verification-and-quality-assurance">Verification and quality assurance</a> | <a href="#reproduction">Reproduction</a> | <a href="#cite">Cite</a> | <a href="#license">License</a> | <a href="#contact">Contact</a></sub></p>
 
@@ -18,11 +18,11 @@ Each bundle is one Harbor task in a directory named by its content-derived uuid5
 
 | Property | Value |
 | --- | --- |
-| Bundles | 1 of 30 |
-| Sealed | 1 of 1 |
-| Registrations | unregistered (1) |
-| Audit verdicts | none (1) |
-| Harbor schema | 1.4 (1) |
+| Bundles | 0 of 30 |
+| Sealed | 0 of 0 |
+| Registrations | none |
+| Audit verdicts | none |
+| Harbor schema | none |
 
 ## Difficulty tiers
 
@@ -32,44 +32,19 @@ Difficulty is measured by the signed pilot alone and never declared in a bundle,
 
 The verdict is the audit outcome recorded at the sealed digest, and `none` means no verdict has landed for that digest yet. Only an authoring run removes a bundle from this lane, so removal waits for the next one.
 
-| uuid | Verdict | Sealed digest | Stream |
-| --- | --- | --- | --- |
-| 64356c38-2f28-5b44-b196-7913f6f1d2d9 | none | `734da286388cf601e8b4d783e9cee4a2d1e12ef31fdab0e60dd816d5a511a6e3` | forge-ankit-ethara-ethara-ai-20261026t134628z-b5ea82 |
-
 ## Coverage
 
-| Keyword | Bundles |
-| --- | --- |
-| continuous-reward | 1 |
-| credit-assignment | 1 |
-| jax | 1 |
-| pennylane | 1 |
-| performance-optimization | 1 |
-| program-capture | 1 |
-| python | 1 |
+No resident bundle declares a keyword.
 
 ## Dataset structure
 
-| Bundle | Task | Keywords | Registration | Sealed at | Tier |
-| --- | --- | --- | --- | --- | --- |
-| [`64356c38-2f28-5b44-b196-7913f6f1d2d9`](64356c38-2f28-5b44-b196-7913f6f1d2d9/) | `ethara/pennylane-capture-wrapped-operator-tracing` | continuous-reward, credit-assignment, jax, pennylane, performance-optimization, program-capture, python | unregistered | 2026-10-28T15:50:09Z | - |
-
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#131a33","primaryTextColor":"#e8ecff","primaryBorderColor":"#845EF7","lineColor":"#22d3ee","fontFamily":"monospace"}}}%%
-flowchart LR
-    bundle["&lt;uuid&gt;/"]
-    bundle --> n0["task.toml<br/>runner manifest"]
-    bundle --> n1["instruction.md<br/>objective the agent reads"]
-    bundle --> n2["environment/<br/>agent sandbox image"]
-    bundle --> n3["tests/<br/>verifier, hidden from the agent"]
-    bundle --> n4["solution/<br/>private oracle"]
-```
+No bundle is resident under `samples/`.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"primaryColor":"#131a33","primaryTextColor":"#e8ecff","primaryBorderColor":"#845EF7","lineColor":"#22d3ee","fontFamily":"monospace"}}}%%
 flowchart LR
     staging["staging/"]
-    staging --> samples["samples/<br/>1 of 30"]
+    staging --> samples["samples/<br/>0 of 30"]
     samples --> delivery["delivery/<br/>0 of 10000"]
     delivery --> stock["stock/<br/>0 of 10000"]
 ```
