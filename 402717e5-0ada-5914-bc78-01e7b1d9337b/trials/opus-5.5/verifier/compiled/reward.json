@@ -1,7 +1,7 @@
 {
-  "reward": 0.6335,
+  "reward": 0.4959,
   "correctness": 1.0,
-  "geomean_speedup_ratio": 0.6494,
-  "noise_band": 0.0071,
+  "geomean_speedup_ratio": 0.514,
+  "noise_band": 0.0106,
   "failure_stage": 0.0
 }

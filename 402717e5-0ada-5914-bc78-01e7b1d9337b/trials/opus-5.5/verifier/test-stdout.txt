@@ -1,1 +1,1 @@
-{"compiled_score": 0.6335, "correctness": 1.0, "failure_stage": 0.0, "geomean_speedup_ratio": 0.6494, "judged_score": 0.9, "noise_band": 0.0071, "reward": 0.7134499999999999}
+{"compiled_score": 0.4959, "correctness": 1.0, "failure_stage": 0.0, "geomean_speedup_ratio": 0.514, "judged_score": 1.0, "noise_band": 0.0106, "reward": 0.64713}

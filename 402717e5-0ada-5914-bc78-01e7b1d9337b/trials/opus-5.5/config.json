@@ -3,8 +3,8 @@
         "path": "402717e5-0ada-5914-bc78-01e7b1d9337b",
         "source": "kraken"
     },
-    "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__wqK5tdt",
-    "trials_dir": "opus55-all5-final-20261116-210843",
+    "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__gneW6bY",
+    "trials_dir": "opus55-sm20c3-20261117-172524",
     "agent_setup_timeout_multiplier": 10.0,
     "agent": {
         "name": "claude-code",
@@ -43,5 +43,5 @@
             "172.17.0.1"
         ]
     },
-    "job_id": "faeae179-cd41-420e-b271-c7241d61fa4b"
+    "job_id": "ca46123a-988d-4f9c-ad5f-276c30c9bc1d"
 }

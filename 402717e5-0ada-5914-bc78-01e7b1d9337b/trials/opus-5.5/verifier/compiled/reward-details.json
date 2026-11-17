@@ -1,7 +1,7 @@
 {
   "reward": {
     "kind": "group",
-    "score": 0.6335,
+    "score": 0.4959,
     "aggregation": "weighted-mean",
     "components": [
       {
@@ -26,12 +26,12 @@
         "name": "diag_noise",
         "weight": 0.0,
         "detail": {
-          "score": 0.0071,
+          "score": 0.0106,
           "criteria": [
             {
               "name": "diag_noise",
-              "value": 0.0071,
-              "raw": 0.00707654618697199,
+              "value": 0.0106,
+              "raw": 0.010550844044373307,
               "weight": 1.0,
               "description": "diag_noise",
               "reasoning": "aa-median-abs-log-ratio"
@@ -44,15 +44,15 @@
         "name": "diag_speedup",
         "weight": 0.0,
         "detail": {
-          "score": 0.6494,
+          "score": 0.514,
           "criteria": [
             {
               "name": "diag_speedup",
-              "value": 0.6494,
-              "raw": 0.6494127062158496,
+              "value": 0.514,
+              "raw": 0.5140163743647286,
               "weight": 1.0,
               "description": "diag_speedup",
-              "reasoning": "{\"harmonic\": 0.6334791868384246, \"sr\": {\"w1\": 0.5091249259519285, \"w2\": 0.4883892860232493, \"w3\": 0.6376745407888808, \"w4\": 0.6715673352264324, \"w5\": 0.738242867381332, \"w6\": 0.9542151335392809}}"
+              "reasoning": "{\"harmonic\": 0.4958910063090209, \"sr\": {\"w1\": 0.4106671523963149, \"w2\": 0.382927284028297, \"w3\": 0.5088452777305186, \"w4\": 0.47571625923235217, \"w5\": 0.5267405449886958, \"w6\": 0.919866818558505}}"
             }
           ],
           "kind": "programmatic"
@@ -80,151 +80,151 @@
         "name": "test_output",
         "weight": 70.0,
         "detail": {
-          "score": 0.6335,
+          "score": 0.4959,
           "criteria": [
             {
               "name": "d1_outcome_harmonic_speedup",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_coverage_well_conditioned",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_coverage_narrow_minimum",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 3.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_robustness_near_collinear",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_robustness_fallback",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_constraints_covering_tests",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_constraints_tree_modified",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 1.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "d1_robustness_timed_results",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 3.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl1_constraints_protected_edit",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl1_robustness_harness_integrity",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 1.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl2_constraints_persistence_api",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl2_robustness_cross_call_state",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl3_constraints_context_read",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl4_constraints_visible_literal",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 3.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl5_constraints_parallel_api",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 3.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl5_robustness_cpu_over_wall",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl6_constraints_compiled_or_startup_file",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 5.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             },
             {
               "name": "rl6_robustness_runtime_patch",
-              "value": 0.6335,
-              "raw": 0.6334791868384246,
+              "value": 0.4959,
+              "raw": 0.4958910063090209,
               "weight": 1.0,
               "description": "rubric_item",
-              "reasoning": "{\"credit\": 0.6334791868384246, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
+              "reasoning": "{\"credit\": 0.4958910063090209, \"failure_stage\": \"none\", \"gate_open\": true, \"holds\": true, \"verdict\": \"accept\"}"
             }
           ],
           "kind": "programmatic"

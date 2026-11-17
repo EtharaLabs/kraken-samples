@@ -24,7 +24,6 @@ This repository holds the five-task sample. The tasks cover quantum circuit comp
 | Platforms | linux/amd64, linux/arm64 |
 | Reward | bounded continuous, 0 to 1 |
 | Agent | Claude Code with `claude-opus-5-5` (Claude Opus 5.5) |
-| Runs | 1 per task |
 
 ## Tasks
 
@@ -38,12 +37,12 @@ This repository holds the five-task sample. The tasks cover quantum circuit comp
 
 ## Trials
 
-Each task was run once with Claude Code driving Claude Opus 5.5 and scored by the task's own verifier. Trials are stored in each task's `trials/opus-5.5/`.
+Each task was run with Claude Code driving Claude Opus 5.5 and scored by the task's own verifier. Trials are stored in each task's `trials/opus-5.5/`.
 
 | Task | Model | Agent | Reward | Cost (USD) | Agent time |
 | --- | --- | --- | --- | --- | --- |
 | [015a6071-67df-5d6f-8e11-e538be4b1e0b](015a6071-67df-5d6f-8e11-e538be4b1e0b/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.325 | 0.3874 | 2.38 | 16m 31s |
-| [402717e5-0ada-5914-bc78-01e7b1d9337b](402717e5-0ada-5914-bc78-01e7b1d9337b/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.325 | 0.7134 | 3.42 | 23m 52s |
+| [402717e5-0ada-5914-bc78-01e7b1d9337b](402717e5-0ada-5914-bc78-01e7b1d9337b/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.326 | 0.6471 | 2.12 | 14m 54s |
 | [496c6249-46bd-5b5d-9723-0730665e7c51](496c6249-46bd-5b5d-9723-0730665e7c51/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.325 | 0.4090 | 1.10 | 7m 5s |
 | [87ec7a10-cfc2-5ea6-aa61-a922bf9db6b0](87ec7a10-cfc2-5ea6-aa61-a922bf9db6b0/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.325 | 0.5758 | 0.53 | 41m 45s |
 | [e27499cd-a843-5dec-9974-9fac21853371](e27499cd-a843-5dec-9974-9fac21853371/trials/opus-5.5/) | claude-opus-5-5 | claude-code 2.1.326 | 0.5294 | 4.93 | 31m 2s |

@@ -2,38 +2,68 @@ changed paths: {"applied": ["statsmodels/tsa/stattools/_stattools.py"], "compile
 
 --- a/statsmodels/tsa/stattools/_stattools.py
 +++ b/statsmodels/tsa/stattools/_stattools.py
-@@ -11,7 +11,7 @@
+@@ -3856,6 +3856,37 @@
+     if store:
+         return rur_stat, p_value, crit_dict, rstore
+     return rur_stat, p_value, crit_dict
++
++
++def _orthogonalize(q, d):
++    """
++    Split columns into their projection on an orthonormal basis and the rest
++
++    Parameters
++    ----------
++    q : ndarray
++        The orthonormal basis, (nobs, p).
++    d : ndarray
++        The columns to split, (nobs, g).
++
++    Returns
++    -------
++    w : ndarray
++        The coordinates ``q.T @ d`` of the projection, (p, g).
++    rho : ndarray
++        The triangular factor of the remainder ``d - q @ w``, (g, g).
++
++    Notes
++    -----
++    The remainder is orthogonalized twice, which makes it orthogonal to
++    ``q`` to working precision even if it is small relative to ``d``.
++    """
++    d = np.asarray(d, dtype=float)
++    w = q.T @ d
++    v = d - q @ w
++    w_v = q.T @ v
++    v -= q @ w_v
++    return w + w_v, np.linalg.qr(v, mode="r")
  
- import numpy as np
- import pandas as pd
--from scipy import stats
-+from scipy import linalg, stats
- from scipy.interpolate import interp1d
- from scipy.signal import correlate
  
-@@ -4174,6 +4174,208 @@
+ class ZivotAndrewsUnitRoot:
+@@ -4174,6 +4205,206 @@
              exog[(cutoff - 1) :, 2] = trend[0 : (nobs - period + 1)]
          return exog
  
-+    def _period_stats_from_qr(
-+        self, endog, exog, regression, periods, nobs, trend, cols, lags
++    def _break_tvalues(
++        self, endog, exog, regression, periods, nobs, const, trend, cols, lags
 +    ):
 +        """
-+        Compute the period t-statistics from a single QR decomposition
++        t-statistics of the lagged level for all candidate break periods
 +
 +        Parameters
 +        ----------
 +        endog : ndarray
 +            The dependent variable of the auxiliary regressions.
 +        exog : ndarray
-+            The regressor matrix from ``_format_regression_data``. Only the
-+            constant, lagged level and lagged difference columns are used.
++            The regressor matrix from ``_format_regression_data``.
 +        regression : {"c", "t", "ct"}
 +            The trend order to include in the regression.
 +        periods : ndarray
-+            The candidate break periods.
++            The candidate break periods, increasing.
 +        nobs : int
 +            The number of observations in series.
++        const : float
++            The normalized constant term value to use in exog.
 +        trend : ndarray
 +            The normalized trend values to use in exog.
 +        cols : int
@@ -43,206 +73,248 @@ changed paths: {"applied": ["statsmodels/tsa/stattools/_stattools.py"], "compile
 +
 +        Returns
 +        -------
-+        stats : ndarray
-+            The t-statistic of the lagged level for each period. NaN for the
-+            periods flagged in ``use_fallback``.
-+        use_fallback : ndarray
-+            Boolean array that is True for the periods that must be computed
-+            by the per-period regressions instead.
++        ndarray or None
++            The t-statistic of the lagged level in the regression of each
++            period. None if there are no periods, the data are not finite, a
++            break dummy wraps around or has too few nonzero rows, or a
++            regression is (almost) singular or fits (almost) perfectly. The
++            caller then fits the periods one by one.
 +
 +        Notes
 +        -----
-+        Only the break dummies change between periods. Let W hold the fixed
-+        regressors (constant, trend and lagged differences), x the lagged
-+        level and e the dependent variable, and let ``[W, x, e] = Q R`` be
-+        the QR decomposition. After partialling out W, x is ``q_x r_xx`` and
-+        e is ``q_x r_xe + q_e r_ee``, where ``q_x``, ``q_e`` are the last two
-+        columns of Q. A dummy matrix D splits into ``Q g`` with ``g = Q'D``
-+        and a part orthogonal to all of Q, whose cross product is
-+        ``H = D'D - g'g = S'S``. In the orthonormal coordinates
-+        ``(q_x, q_e, basis of the orthogonal part)`` the regression of e on
-+        ``[D, x]`` after partialling out W has the small regressor matrix
-+        ``[[g_x, r_xx], [g_e, 0], [S, 0]]`` and dependent variable
-+        ``(r_xe, r_ee, 0)``. The trailing entries ``r11, r12, r22`` of the R
-+        factor of this small regression give the t-statistic of x as
-+        ``sqrt(df) * sign(r11) * r12 / |r22|``.
++        The regressors of period ``bp`` are ``X = [F, D, ylag]``, where
++        ``F = [const, trend, lags]`` does not depend on the period, ``ylag``
++        is the lagged level and ``D`` holds the break dummies. Their rows
++        ``r >= s``, with ``s = bp - lags - 1`` (``bp - lags - 2`` for "t"),
++        form the tail, the others the head. Only the span of ``X`` matters
++        for the t-statistic of ``ylag``, so ``D`` is replaced by
 +
-+        Every dummy is a step or a ramp starting at the break, so ``g`` is a
-+        partial sum of the rows of Q (weighted by the row index for a ramp)
-+        and ``D'D`` has a closed form. Adding constant and trend terms to D
-+        does not change the regression, so the dummies are taken on the
-+        shorter side of the break, which keeps their projection on the
-+        constant and trend small. Periods where computing H by subtraction
-+        loses more than half of the digits, or where x or e are explained
-+        up to rounding, are flagged for the per-period regressions, as
-+        are periods whose dummies wrap around the sample or lie in the span
-+        of the constant and trend. All periods
-+        are flagged if the data are not finite or there are too few
-+        observations, and the first period is flagged if its regressors are
-+        close to the rank deficiency that ``run`` checks there.
++        * "c": the step ``1{r >= s}``,
++        * "t": the hinge ``(r - s + 1) 1{r >= s}``,
++        * "ct": both.
++
++        As ``F`` contains a constant and a trend, these are interchangeable
++        with their head versions ``1{r < s}`` and ``(s - 1 - r) 1{r < s}``,
++        which differ from the tail versions by a linear function of ``r``.
++        The shorter side is used, which keeps ``D`` far from ``F``.
++
++        Let ``A = [F, ylag, endog] = QR``. Then ``D = Qw + v`` with
++        ``w = Q'D`` and ``v`` orthogonal to ``A``. Row sums of ``Q`` over
++        the head (prefix sums) and the tail (suffix sums) give ``w`` of the
++        steps for all periods at once. The hinges follow from a second
++        cumulative sum, since ``(s - 1 - r) 1{r < s}`` is the sum of
++        ``1{r < j}`` over ``j < s``, and ``(r - s + 1) 1{r >= s}`` that of
++        ``1{r >= j}`` over ``j >= s``. ``D'D`` is known in closed form and
++        ``rho'rho = D'D - w'w`` gives the triangular ``rho`` with
++        ``v = V rho`` for an orthonormal ``V``. The subtraction cancels when
++        ``v`` is small relative to ``D``; for those periods ``w`` and ``rho``
++        are computed from ``D`` itself, orthogonalizing twice.
++
++        With ``[A, D] = [Q, V] [[R, w], [0, rho]]``, the triangular factor
++        of ``[F, D, ylag, endog]`` has ``R[:m, :m]`` (``m`` columns in
++        ``F``) in its leading block and the triangular factor of
++
++            T = [[w[m:], R[m:, m:]], [rho, 0]]
++
++        in its trailing block. With ``r_xx``, ``r_xy`` and ``r_yy`` the
++        entries of the latter for ``ylag`` and ``endog``, the coefficient of
++        ``ylag`` is ``r_xy / r_xx``, its standard error is
++        ``|r_yy| / sqrt(df_resid) / |r_xx|``, and so the t-statistic is
++        ``sign(r_xx) r_xy sqrt(df_resid) / |r_yy|``.
 +        """
-+        nper = periods.shape[0]
-+        stats = np.full(nper, np.nan)
-+        use_fallback = np.ones(nper, dtype=bool)
-+        nrows = exog.shape[0]
-+        df_resid = nrows - exog.shape[1]
-+        # columns [W, x, e]: constant, trend, lagged differences, lagged level
-+        # and the dependent variable
-+        fixed = np.column_stack(
-+            [
-+                exog[:, 0],
-+                trend[(lags + 2) : (nobs + 1)],
-+                exog[:, cols:],
-+                exog[:, cols - 1],
-+                endog,
-+            ]
-+        )
-+        if nper == 0 or df_resid < 1 or not np.all(np.isfinite(fixed)):
-+            return stats, use_fallback
-+        q, r = linalg.qr(fixed, mode="economic", check_finite=False)
-+        k_fixed = fixed.shape[1] - 2
-+        eps = np.finfo(np.double).eps
-+        # tolerance for losing more than half of the digits
-+        tol = np.sqrt(eps)
-+
-+        # The dummies of ``_update_regression_exog`` are nonzero from row
-+        # ``start`` on: a step with values 1 ("c", "ct") and a ramp with values
-+        # 1, 2, ... ("t"; the ramp of "ct" is 2, 3, ..., which spans the same
-+        # space together with the step). The minimum numbers of rows before
-+        # and from ``start`` keep the dummies from wrapping around the sample
-+        # and linearly independent of the constant and trend.
-+        cutoff = periods - (lags + 1)
++        nrows, k = exog.shape
 +        if regression == "c":
-+            has_step, has_ramp = True, False
-+            start, min_before, min_after = cutoff, 1, 1
++            dummy_cols, shift = [1], 0
 +        elif regression == "t":
-+            has_step, has_ramp = False, True
-+            start, min_before, min_after = cutoff - 1, 2, 1
++            dummy_cols, shift = [2], 1
 +        else:
-+            has_step, has_ramp = True, True
-+            start, min_before, min_after = cutoff, 2, 2
-+        valid = (start >= min_before) & (nrows - start >= min_after)
-+        # The dummies are taken on the shorter side of ``start``: the m rows
-+        # from ``start`` on (right) or the m rows before it (left). On the
-+        # right the step is 1 and the ramp is ``m - i`` in the rows
-+        # ``i = 0, ..., m - 1`` counted backward from the last row. On the
-+        # left the step is 1 and the ramp is ``m - 1 - i`` in the rows
-+        # ``i = 0, ..., m - 1`` counted forward from the first row. These
-+        # differ from the dummies above by multiples of the constant and trend.
-+        right = nrows - start <= start
-+        size = np.where(right, nrows - start, start)
-+        step_sum = np.zeros((nper, fixed.shape[1]))
-+        ramp_sum = np.zeros((nper, fixed.shape[1]))
-+        for side_rows, on_right in ((q[::-1], True), (q, False)):
-+            side = valid & (right == on_right)
-+            if not side.any():
-+                continue
-+            m = size[side]
-+            nsum = m.max()
-+            csum = np.cumsum(side_rows[:nsum], axis=0)
-+            step_sum[side] = csum[m - 1]
-+            if has_ramp:
-+                weighted = np.arange(nsum)[:, None] * side_rows[:nsum]
-+                isum = np.cumsum(weighted, axis=0)
-+                ramp_top = m if on_right else m - 1
-+                ramp_sum[side] = ramp_top[:, None] * csum[m - 1] - isum[m - 1]
-+        # closed-form D'D of the step (values 1) and of the ramp whose values
-+        # run from ``first = 1`` (right) or ``first = 0`` (left) to
-+        # ``first + m - 1``
-+        first = right.astype(np.double)
-+        m = size.astype(np.double)
-+        last = first + m - 1
++            dummy_cols, shift = [1, 3], 0
++        g = len(dummy_cols)
++        # First row of the tail of each period
++        starts = periods - (lags + 1) - shift
++        # A step needs a row on each side to differ from the constant, and a
++        # hinge (alone or with a step) two rows on each side to differ from
++        # the trend (and the step). Fewer rows, or dummies that wrap around,
++        # are left to the period-by-period fits.
++        min_rows = 2 if regression in ("t", "ct") else 1
++        if (
++            periods.shape[0] == 0
++            or nrows <= k
++            or starts[0] < min_rows
++            or nrows - starts[-1] < min_rows
++            or not np.all(np.isfinite(endog))
++            or not np.all(np.isfinite(exog))
++        ):
++            return None
++        eps = np.finfo(float).eps
++        # Relative size below which a singular value or residual is treated
++        # as rounding, with a margin of 10 over the cutoff of matrix_rank
++        rtol = 10 * max(nrows, k) * eps
++        exog = self._update_regression_exog(
++            exog.copy(), regression, periods[0], nobs, const, trend, cols, lags
++        )
++        # F = [const, trend, lags]; ylag is column cols - 1
++        fixed = [i for i in range(cols - 1) if i not in dummy_cols]
++        fixed += list(range(cols, k))
++        m = len(fixed)
++        a = np.column_stack([exog[:, fixed], exog[:, cols - 1], endog])
++        q, r = np.linalg.qr(a)
++        p = q.shape[1]
++        # The first period is fitted by OLS, which raises if its regressors
++        # are not of full rank. They have the singular values of the
++        # triangular factor of [F, ylag, D] for its own dummies D.
++        w_first, rho_first = _orthogonalize(q, exog[:, dummy_cols])
++        r_first = np.zeros((p + g, m + 1 + g))
++        r_first[:p, : m + 1] = r[:, : m + 1]
++        r_first[:p, m + 1 :] = w_first
++        r_first[p:, m + 1 :] = rho_first
++        sv = np.linalg.svd(r_first, compute_uv=False)
++        if not sv[-1] > rtol * sv[0]:
++            return None
 +
-+        def sum_squares(n):
-+            return n * (n + 1) * (2 * n + 1) / 6
++        # Use the head of a period if it is not longer than its tail
++        head = starts <= nrows - starts
++        step_len = np.where(head, starts, nrows - starts).astype(float)
++        hinge_len = np.where(head, starts - 1, nrows - starts).astype(float)
++        # prefix[j] is the sum of rows r < j of q, suffix[j] that of r >= j
++        prefix = np.zeros((nrows + 1, p))
++        np.cumsum(q, axis=0, out=prefix[1:])
++        suffix = np.zeros((nrows + 1, p))
++        suffix[:-1] = np.cumsum(q[::-1], axis=0)[::-1]
++        w_cols, norms = [], []
++        if regression != "t":
++            w_cols.append(np.where(head[:, None], prefix[starts], suffix[starts]))
++            norms.append(step_len)
++        if regression != "c":
++            hinge_prefix = np.zeros((nrows + 1, p))
++            np.cumsum(prefix[:-1], axis=0, out=hinge_prefix[1:])
++            hinge_suffix = np.cumsum(suffix[::-1], axis=0)[::-1]
++            w_cols.append(
++                np.where(head[:, None], hinge_prefix[starts], hinge_suffix[starts])
++            )
++            norms.append(hinge_len * (hinge_len + 1) * (2 * hinge_len + 1) / 6)
++        w = np.stack(w_cols, axis=-1)
++        dtd = np.empty((periods.shape[0], g, g))
++        for i in range(g):
++            dtd[:, i, i] = norms[i]
++        if g == 2:
++            # The hinge is nonzero only where the step is one, so their cross
++            # product is the sum of the hinge values 1, ..., hinge_len
++            dtd[:, 0, 1] = dtd[:, 1, 0] = hinge_len * (hinge_len + 1) / 2
 +
-+        with np.errstate(divide="ignore", invalid="ignore"):
-+            ramp_ss = sum_squares(last) - sum_squares(first - 1)
-+            # correlation of the step and the ramp
-+            step_ramp_corr = (first + last) * m / 2 / np.sqrt(m * ramp_ss)
-+            # dummies scaled to unit norm, as columns of g = Q'D
-+            gcols = []
-+            if has_step:
-+                gcols.append(step_sum / np.sqrt(m)[:, None])
-+            if has_ramp:
-+                gcols.append(ramp_sum / np.sqrt(ramp_ss)[:, None])
-+        g = np.stack(gcols, axis=2)
-+        ndummy = g.shape[2]
-+        # D'D of the unit-norm dummies
-+        dpd = np.broadcast_to(np.eye(ndummy), (nper, ndummy, ndummy)).copy()
-+        if ndummy == 2:
-+            dpd[:, 0, 1] = dpd[:, 1, 0] = step_ramp_corr
-+        # Cross product of the part of D orthogonal to Q. With unit-norm
-+        # dummies, the subtraction loses about -log10(smallest eigenvalue)
-+        # digits.
-+        h = dpd - np.matmul(np.swapaxes(g, 1, 2), g)
-+        if ndummy == 1:
-+            min_eig = h[:, 0, 0]
-+        else:
-+            half_trace = (h[:, 0, 0] + h[:, 1, 1]) / 2
-+            min_eig = half_trace - np.hypot((h[:, 0, 0] - h[:, 1, 1]) / 2, h[:, 0, 1])
-+        ok = valid & (min_eig > tol)
-+        s = np.swapaxes(np.linalg.cholesky(h[ok]), 1, 2)
-+        # small regression in the coordinates (q_x, q_e, orthogonal part)
-+        small = np.zeros((s.shape[0], ndummy + 2, ndummy + 2))
-+        small[:, 0, :ndummy] = g[ok, k_fixed, :]
-+        small[:, 1, :ndummy] = g[ok, k_fixed + 1, :]
-+        small[:, 2:, :ndummy] = s
-+        small[:, 0, ndummy] = r[k_fixed, k_fixed]
-+        small[:, 0, ndummy + 1] = r[k_fixed, k_fixed + 1]
-+        small[:, 1, ndummy + 1] = r[k_fixed + 1, k_fixed + 1]
-+        small_r = np.linalg.qr(small, mode="r")
-+        r11 = small_r[:, ndummy, ndummy]
-+        r12 = small_r[:, ndummy, ndummy + 1]
-+        r22 = small_r[:, ndummy + 1, ndummy + 1]
-+        # x or e in the span of the other regressors up to rounding, using
-+        # the default rank tolerance of numpy.linalg.matrix_rank
-+        rank_tol = nrows * eps * np.linalg.norm(fixed[:, k_fixed:], axis=0)
-+        explained = (np.abs(r11) <= rank_tol[0]) | (np.abs(r22) <= rank_tol[1])
-+        with np.errstate(divide="ignore", invalid="ignore"):
-+            tvalues = np.sqrt(df_resid) * np.sign(r11) * r12 / np.abs(r22)
-+        stats[ok] = np.where(explained, np.nan, tvalues)
-+        use_fallback[ok] = explained
-+        if not use_fallback[0]:
-+            # Singular values of the regressors [W, x, D] of the first
-+            # period, from their factor in the coordinates (Q, orthogonal
-+            # part of D). The first period is the first row of ``s``.
-+            factor = np.zeros((k_fixed + 2 + ndummy, k_fixed + 1 + ndummy))
-+            factor[: k_fixed + 2, : k_fixed + 1] = r[:, : k_fixed + 1]
-+            factor[: k_fixed + 2, k_fixed + 1 :] = g[0]
-+            factor[k_fixed + 2 :, k_fixed + 1 :] = s[0]
-+            sv = np.linalg.svd(factor, compute_uv=False)
-+            if sv[-1] <= tol * sv[0]:
-+                use_fallback[0] = True
-+                stats[0] = np.nan
-+        return stats, use_fallback
++        # Cholesky factor of v'v = D'D - w'w (Pythagoras, as v is orthogonal
++        # to Q). A pivot that is a fraction f of the squared norm of its
++        # column carries 1 / f times the relative rounding error of the sums,
++        # so periods with f <= 1e-3 are recomputed from their dummies.
++        gram = dtd - np.swapaxes(w, 1, 2) @ w
++        rho = np.zeros_like(gram)
++        accurate = np.ones(periods.shape[0], dtype=bool)
++        for i in range(g):
++            pivot = gram[:, i, i] - np.sum(rho[:, :i, i] ** 2, axis=1)
++            accurate &= pivot > 1e-3 * dtd[:, i, i]
++            rho[:, i, i] = np.sqrt(np.where(accurate, pivot, 1.0))
++            for j in range(i + 1, g):
++                off = gram[:, i, j] - np.sum(rho[:, :i, i] * rho[:, :i, j], axis=1)
++                rho[:, i, j] = off / rho[:, i, i]
++        rows = np.arange(nrows)
++        for idx in np.flatnonzero(~accurate):
++            s = starts[idx]
++            if head[idx]:
++                dummies = [rows < s, np.clip(s - 1 - rows, 0, None)]
++            else:
++                dummies = [rows >= s, np.clip(rows - s + 1, 0, None)]
++            if regression == "c":
++                dummies = dummies[:1]
++            elif regression == "t":
++                dummies = dummies[1:]
++            w[idx], rho[idx] = _orthogonalize(q, np.column_stack(dummies))
++
++        t_mat = np.zeros((periods.shape[0], g + 2, g + 2))
++        t_mat[:, :2, :g] = w[:, m:]
++        t_mat[:, :2, g:] = r[m:, m:]
++        t_mat[:, 2:, :g] = rho
++        r_small = np.linalg.qr(t_mat, mode="r")
++        diag = np.abs(np.diagonal(r_small, axis1=1, axis2=2))
++        col_norms = np.empty_like(diag)
++        col_norms[:, :g] = np.sqrt(np.diagonal(dtd, axis1=1, axis2=2))
++        col_norms[:, g:] = np.sqrt(np.sum(r[:, m:] ** 2, axis=0))
++        if not np.all(diag > rtol * col_norms):
++            return None
++        r_xx = r_small[:, g, g]
++        r_xy = r_small[:, g, g + 1]
++        return np.sign(r_xx) * r_xy * np.sqrt(nrows - k) / diag[:, g + 1]
 +
      def run(self, x, trim=0.15, maxlag=None, regression="c", autolag="AIC"):
          """
          Zivot-Andrews structural-break unit-root test
-@@ -4289,9 +4491,23 @@
+@@ -4289,31 +4520,46 @@
          endog, exog = self._format_regression_data(
              x, nobs, c_const, t_const, basecols, baselags
          )
 -        # iterate through the time periods
          stats = np.full(end_period + 1, np.inf)
 -        for bp in range(start_period + 1, end_period + 1):
+-            # update intercept dummy / trend / trend dummy
+-            exog = self._update_regression_exog(
+-                exog,
+-                regression,
+-                bp,
+-                nobs,
+-                c_const,
+-                t_const,
+-                basecols,
+-                baselags,
+-            )
+-            # check exog rank on first iteration
+-            if bp == start_period + 1:
+-                o = OLS(endog[baselags:], exog, hasconst=1).fit()
+-                if o.df_model < exog.shape[1] - 1:
+-                    raise ValueError(
+-                        "ZA: auxiliary exog matrix is not full rank.\n"
+-                        f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
+-                    )
+-                stats[bp] = o.tvalues[basecols - 1]
+-            else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
 +        periods = np.arange(start_period + 1, end_period + 1)
-+        # statistics of all periods that can be computed from a single QR
-+        # decomposition; the remaining periods use the per-period regressions
-+        fast_stats, use_fallback = self._period_stats_from_qr(
++        tvalues = self._break_tvalues(
 +            endog[baselags:],
 +            exog,
 +            regression,
 +            periods,
 +            nobs,
++            c_const,
 +            t_const,
 +            basecols,
 +            baselags,
 +        )
-+        stats[periods] = fast_stats
-+        # iterate through the time periods the single QR cannot handle
-+        for bp in periods[use_fallback]:
-             # update intercept dummy / trend / trend dummy
-             exog = self._update_regression_exog(
-                 exog,
++        if tvalues is not None:
++            stats[periods] = tvalues
++        else:
++            # iterate through the time periods
++            for bp in range(start_period + 1, end_period + 1):
++                # update intercept dummy / trend / trend dummy
++                exog = self._update_regression_exog(
++                    exog,
++                    regression,
++                    bp,
++                    nobs,
++                    c_const,
++                    t_const,
++                    basecols,
++                    baselags,
++                )
++                # check exog rank on first iteration
++                if bp == start_period + 1:
++                    o = OLS(endog[baselags:], exog, hasconst=1).fit()
++                    if o.df_model < exog.shape[1] - 1:
++                        raise ValueError(
++                            "ZA: auxiliary exog matrix is not full rank.\n"
++                            f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
++                        )
++                    stats[bp] = o.tvalues[basecols - 1]
++                else:
++                    stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

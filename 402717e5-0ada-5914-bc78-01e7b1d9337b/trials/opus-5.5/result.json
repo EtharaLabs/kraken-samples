@@ -1,13 +1,13 @@
 {
-    "id": "94a43e48-2f55-4c3a-8548-d10b20990fca",
+    "id": "33af810f-a331-48d0-a087-38f56cd62f35",
     "task_name": "ethara/402717e5-0ada-5914-bc78-01e7b1d9337b",
-    "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__wqK5tdt",
-    "trial_uri": "file://402717e5-0ada-5914-bc78-01e7b1d9__wqK5tdt",
+    "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__gneW6bY",
+    "trial_uri": "file://402717e5-0ada-5914-bc78-01e7b1d9__gneW6bY",
     "task_id": {
         "path": "402717e5-0ada-5914-bc78-01e7b1d9337b"
     },
     "source": "kraken",
-    "task_checksum": "8ddd0d4b39f354ab00744cc2e05c4479854d1e0e7c9ec9a1783cc10657ced667",
+    "task_checksum": "ca41b12eb4da243a137deeb116c4b01b2b30421cae35e39d5949aca807d806b8",
     "config": {
         "task": {
             "path": "402717e5-0ada-5914-bc78-01e7b1d9337b",
@@ -19,8 +19,8 @@
             "download_dir": null,
             "source": "kraken"
         },
-        "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__wqK5tdt",
-        "trials_dir": "opus55-all5-final-20261116-210843",
+        "trial_name": "402717e5-0ada-5914-bc78-01e7b1d9__gneW6bY",
+        "trials_dir": "opus55-sm20c3-20261117-172524",
         "install_only": false,
         "timeout_multiplier": 1.0,
         "agent_timeout_multiplier": null,
@@ -96,28 +96,28 @@
         "artifacts": [],
         "extra_instruction_paths": [],
         "extra_instructions": [],
-        "job_id": "faeae179-cd41-420e-b271-c7241d61fa4b",
+        "job_id": "ca46123a-988d-4f9c-ad5f-276c30c9bc1d",
         "source_trial": null
     },
     "agent_info": {
         "name": "claude-code",
-        "version": "2.1.325",
+        "version": "2.1.326",
         "model_info": {
             "name": "claude-opus-5-5",
             "provider": "anthropic"
         }
     },
     "agent_result": {
-        "n_input_tokens": 4367975,
-        "n_cache_tokens": 4173274,
-        "n_output_tokens": 80527,
-        "cost_usd": 3.4186157999999995,
+        "n_input_tokens": 2123272,
+        "n_cache_tokens": 2014126,
+        "n_output_tokens": 58631,
+        "cost_usd": 2.1211252000000003,
         "model_usage": {
             "claude-opus-5-5": {
-                "n_input_tokens": 4367975,
-                "n_cache_tokens": 4173274,
-                "n_output_tokens": 80527,
-                "cost_usd": 3.4186157999999995
+                "n_input_tokens": 2123272,
+                "n_cache_tokens": 2014126,
+                "n_output_tokens": 58631,
+                "cost_usd": 2.1211252000000007
             }
         },
         "rollout_details": null,
@@ -125,34 +125,34 @@
     },
     "verifier_result": {
         "rewards": {
-            "compiled_score": 0.6335,
+            "compiled_score": 0.4959,
             "correctness": 1.0,
             "failure_stage": 0.0,
-            "geomean_speedup_ratio": 0.6494,
-            "judged_score": 0.9,
-            "noise_band": 0.0071,
-            "reward": 0.7134499999999999
+            "geomean_speedup_ratio": 0.514,
+            "judged_score": 1.0,
+            "noise_band": 0.0106,
+            "reward": 0.64713
         }
     },
     "verifier_environment_mode": "separate",
     "exception_info": null,
-    "started_at": "2026-11-16T21:08:46.584589Z",
-    "finished_at": "2026-11-16T21:44:51.544543Z",
+    "started_at": "2026-11-17T17:25:26.906569Z",
+    "finished_at": "2026-11-17T17:56:46.824587Z",
     "environment_setup": {
-        "started_at": "2026-11-16T21:08:46.687265Z",
-        "finished_at": "2026-11-16T21:08:54.491829Z"
+        "started_at": "2026-11-17T17:25:26.967106Z",
+        "finished_at": "2026-11-17T17:25:33.879234Z"
     },
     "agent_setup": {
-        "started_at": "2026-11-16T21:08:54.491852Z",
-        "finished_at": "2026-11-16T21:10:58.151298Z"
+        "started_at": "2026-11-17T17:25:33.879274Z",
+        "finished_at": "2026-11-17T17:27:15.438133Z"
     },
     "agent_execution": {
-        "started_at": "2026-11-16T21:10:58.151526Z",
-        "finished_at": "2026-11-16T21:34:50.280391Z"
+        "started_at": "2026-11-17T17:27:15.438372Z",
+        "finished_at": "2026-11-17T17:42:09.990220Z"
     },
     "verifier": {
-        "started_at": "2026-11-16T21:35:04.905211Z",
-        "finished_at": "2026-11-16T21:44:51.544530Z"
+        "started_at": "2026-11-17T17:42:24.594439Z",
+        "finished_at": "2026-11-17T17:56:46.824573Z"
     },
     "step_results": null
 }
