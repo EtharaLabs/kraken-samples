@@ -1,0 +1,86 @@
+# Judged craft items. Read only by the separate verifier, and only when the run host
+# configures a judge. Each item names the residue no deterministic check over the
+# evidence decides. Every requirement here is stated in instruction.md.
+
+[judge]
+files = ["/logs/verifier/evidence/submission_diff.txt", "/logs/verifier/evidence/test_log.txt", "/logs/verifier/evidence/workload_output.json", "/logs/verifier/evidence/timing_record.json", "/logs/verifier/evidence/scan_record.json"]
+mode = "batched"
+samples = 3
+
+[scoring]
+aggregation = "weighted-mean"
+
+[[criterion]]
+id = "d1_craft_diff_scope"
+name = "d1_craft_diff_scope"
+description = "The diff is confined to Cirq's single-qubit merge path: the unitary computation of small circuit operations, the single-qubit merge transformers in merge_single_qubit_gates.py, the moment-merging primitives they call, and any export of a helper they add. It carries no unrelated rewrites, reformatting or dead code (unused helpers, unreachable branches, commented-out code)."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "craft"
+evidence = "submission_diff"
+residue = "relatedness of a hunk to the merge path, and whether added code is reachable, are semantic judgments"
+
+[[criterion]]
+id = "d1_craft_comments_match"
+name = "d1_craft_comments_match"
+description = "Every docstring and comment the diff adds or changes describes what the new code actually does (for example which moments are merged at once, how repetitions are applied, how global phases are combined), and no existing docstring is left describing behaviour the code no longer has."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "craft"
+evidence = "submission_diff"
+residue = "whether prose matches the code it describes needs reading both together"
+
+[[criterion]]
+id = "rl2_process_global_cache"
+name = "rl2_process_global_cache"
+description = "The diff adds module-level, class-level or function-attribute state (for example a dict, lru_cache or functools.cache over gates, operations, circuits or matrices) that keeps computed unitaries, decompositions or merged results from one transformer call for reuse by a later call."
+type = "binary"
+weight = 1
+negate = true
+
+[criterion.annotations]
+mode = "judged"
+obligation = "RL2"
+dimension = "process"
+evidence = "submission_diff"
+residue = "whether a container outlives one call depends on its scope and clearing, which a token scan cannot decide"
+
+[[criterion]]
+id = "rl4_robustness_visible_special_case"
+name = "rl4_robustness_visible_special_case"
+description = "The diff special-cases the visible workload rather than speeding up the general path: it branches on its qubit layout, gate exponent, cycle count, circuit size, the CZ gauge transformer's output shape, or a threshold tuned to that script."
+type = "binary"
+weight = 1
+negate = true
+
+[criterion.annotations]
+mode = "judged"
+obligation = "RL4"
+dimension = "robustness"
+evidence = "submission_diff"
+residue = "special-casing by structure rather than by literal carries no fixed token; the literal scan covers only the visible seed"
+
+[[criterion]]
+id = "d1_outcome_work_not_deferred"
+name = "d1_outcome_work_not_deferred"
+description = "The speedup comes from doing less work inside the transformer or unitary call, not from moving the work out of it: the diff does not return lazy circuits, moments or operations whose matrices or decompositions are computed only when the result is later read."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "outcome"
+evidence = "submission_diff"
+residue = "whether cost is removed or only relocated to later reads of the result needs reading the data flow; timing alone cannot tell removal from relocation"

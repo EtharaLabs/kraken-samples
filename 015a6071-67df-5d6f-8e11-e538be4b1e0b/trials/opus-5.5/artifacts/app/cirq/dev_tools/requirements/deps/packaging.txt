@@ -1,0 +1,5 @@
+# for creating packages
+setuptools>=70
+
+# for uploading packages to pypi
+twine

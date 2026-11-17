@@ -1,0 +1,895 @@
+diff --git a/cirq-core/cirq/circuits/circuit_operation.py b/cirq-core/cirq/circuits/circuit_operation.py
+--- a/cirq-core/cirq/circuits/circuit_operation.py
++++ b/cirq-core/cirq/circuits/circuit_operation.py
+@@ -24,6 +24,7 @@
+ import math
+ from collections.abc import Callable, Iterator, Mapping, Sequence
+ from functools import cached_property
++from types import NotImplementedType
+ from typing import Any, cast, TYPE_CHECKING, TypeAlias
+ 
+ import numpy as np
+@@ -31,6 +32,7 @@
+ 
+ from cirq import circuits, ops, protocols, study, value
+ from cirq._compat import cached_method, proper_repr
++from cirq.ops import single_qubit_unitary
+ 
+ if TYPE_CHECKING:
+     import cirq
+@@ -305,6 +307,47 @@
+         operations = self._mapped_any_loop.all_operations()
+         return all(protocols.has_unitary(op) for op in operations)
+ 
++    def _unitary_(self) -> np.ndarray | NotImplementedType:
++        """Returns the unitary of a circuit operation on a single qubit.
++
++        The 2x2 unitaries of the contained operations are multiplied as Python complex numbers
++        and the product is raised to the repetitions (a negative count takes the inverse), so
++        neither the decomposition nor the mapped circuit is built. Returns `NotImplemented`,
++        leaving the `cirq.unitary` protocol to its other strategies, for an operation on more
++        than one qubit or on a qudit, with a parameter resolver, `repeat_until` or a
++        non-integer repetition count, or when a contained operation has no unitary.
++        """
++        if (
++            self.repeat_until
++            or self.param_resolver
++            or not isinstance(self.repetitions, INT_CLASSES)
++        ):
++            return NotImplemented
++        qubits = self.circuit.all_qubits()
++        if len(qubits) != 1 or next(iter(qubits)).dimension != 2:
++            return NotImplemented
++        u = single_qubit_unitary.IDENTITY_2
++        for op in self.circuit.all_operations():
++            op_u = single_qubit_unitary.single_qubit_unitary(op)
++            if op_u is None:
++                return NotImplemented
++            if isinstance(op_u, complex):
++                u = (u[0] * op_u, u[1] * op_u, u[2] * op_u, u[3] * op_u)
++            else:
++                u = single_qubit_unitary.multiply(op_u, u)
++        repetitions = int(self.repetitions)
++        if repetitions < 0:
++            u = (u[0].conjugate(), u[2].conjugate(), u[1].conjugate(), u[3].conjugate())
++            repetitions = -repetitions
++        result = single_qubit_unitary.IDENTITY_2
++        while repetitions:
++            if repetitions & 1:
++                result = single_qubit_unitary.multiply(u, result)
++            repetitions >>= 1
++            if repetitions:
++                u = single_qubit_unitary.multiply(u, u)
++        return np.array([[result[0], result[1]], [result[2], result[3]]], dtype=np.complex128)
++
+     def _ensure_deterministic_loop_count(self):
+         if self.repeat_until or isinstance(self.repetitions, sympy.Expr):
+             raise ValueError('Cannot unroll circuit due to nondeterministic repetitions')
+diff --git a/cirq-core/cirq/ops/single_qubit_unitary.py b/cirq-core/cirq/ops/single_qubit_unitary.py
+new file mode 100644
+--- /dev/null
++++ b/cirq-core/cirq/ops/single_qubit_unitary.py
+@@ -0,0 +1,185 @@
++# Copyright 2026 The Cirq Developers
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""Unitaries of one-qubit and zero-qubit operations as plain Python numbers.
++
++Merging long runs of single-qubit gates spends most of its time computing and multiplying
++2x2 matrices. The helpers here compute the matrices of the common single-qubit gates in
++closed form and multiply them as tuples of Python complex numbers, which avoids the
++overhead of the `cirq.unitary` protocol and of small numpy arrays.
++
++A one-qubit unitary is a tuple `(u00, u01, u10, u11)` of its row-major entries, and a
++zero-qubit unitary is a single complex number. The results are exact, global phase
++included.
++"""
++
++from __future__ import annotations
++
++import cmath
++import math
++from collections.abc import Callable
++from typing import TYPE_CHECKING, TypeAlias
++
++from cirq import protocols
++from cirq.ops import common_gates, gate_operation, global_phase_op, identity, pauli_gates
++from cirq.ops import phased_x_gate, phased_x_z_gate
++
++if TYPE_CHECKING:
++    import cirq
++
++Matrix2: TypeAlias = tuple[complex, complex, complex, complex]
++
++IDENTITY_2: Matrix2 = (1 + 0j, 0j, 0j, 1 + 0j)
++
++_SQRT_HALF = math.sqrt(0.5)
++
++
++def _is_number(x: object) -> bool:
++    return isinstance(x, (int, float))
++
++
++def _eigen_weights(gate: cirq.EigenGate) -> tuple[complex, complex] | None:
++    """Returns the phases of the 0 and 1 half-turn eigenspaces of an exponentiated gate."""
++    t = gate.exponent
++    if not _is_number(t):
++        return None
++    s = gate.global_shift
++    # The same powers as `cirq.EigenGate._unitary_`, so integer half-turns stay exact.
++    return 1j ** (2 * t * s), 1j ** (2 * t * (1 + s))
++
++
++def _x_pow(gate: cirq.XPowGate) -> Matrix2 | None:
++    w = _eigen_weights(gate)
++    if w is None:
++        return None
++    c, d = (w[0] + w[1]) * 0.5, (w[0] - w[1]) * 0.5
++    return c, d, d, c
++
++
++def _y_pow(gate: cirq.YPowGate) -> Matrix2 | None:
++    w = _eigen_weights(gate)
++    if w is None:
++        return None
++    c, d = (w[0] + w[1]) * 0.5, (w[0] - w[1]) * 0.5
++    return c, -1j * d, 1j * d, c
++
++
++def _z_pow(gate: cirq.ZPowGate) -> Matrix2 | None:
++    w = _eigen_weights(gate)
++    if w is None:
++        return None
++    return w[0], 0j, 0j, w[1]
++
++
++def _h_pow(gate: cirq.HPowGate) -> Matrix2 | None:
++    w = _eigen_weights(gate)
++    if w is None:
++        return None
++    c, r = (w[0] + w[1]) * 0.5, (w[0] - w[1]) * 0.5 * _SQRT_HALF
++    return c + r, r, r, c - r
++
++
++def _phased_x_pow(gate: cirq.PhasedXPowGate) -> Matrix2 | None:
++    t, p = gate.exponent, gate.phase_exponent
++    if not (_is_number(t) and _is_number(p)):
++        return None
++    shift = cmath.exp(1j * math.pi * gate.global_shift * t)
++    w1 = 1j ** (2 * t)
++    c, d = (1 + w1) * 0.5 * shift, (1 - w1) * 0.5 * shift
++    e = 1j ** (2 * p)
++    return c, d * e.conjugate(), d * e, c
++
++
++def _phased_xz(gate: cirq.PhasedXZGate) -> Matrix2 | None:
++    a, x, z = gate.axis_phase_exponent, gate.x_exponent, gate.z_exponent
++    if not (_is_number(a) and _is_number(x) and _is_number(z)):
++        return None
++    # The same terms as `cirq.PhasedXZGate._unitary_`, without round-off at half-integer x.
++    if x % 1 == 0.5:
++        ucx = 0.5 + 0.5j * (-1) ** math.floor(x)
++        usx = ucx.conjugate()
++    else:
++        cpxh = 1j**x
++        ucx = cpxh * cpxh.real
++        usx = -1j * cpxh * cpxh.imag
++    return ucx, usx * 1j ** (-2 * a), usx * 1j ** (2 * (z + a)), ucx * 1j ** (2 * z)
++
++
++def _identity(gate: cirq.IdentityGate) -> Matrix2 | None:
++    return IDENTITY_2 if gate.num_qubits() == 1 else None
++
++
++# Closed forms by exact gate type. Subclasses that are not listed take the protocol path, so
++# a subclass overriding its unitary is never mistaken for its parent.
++_CLOSED_FORMS: dict[type, Callable[[cirq.Gate], Matrix2 | None]] = {
++    common_gates.XPowGate: _x_pow,
++    common_gates.Rx: _x_pow,
++    pauli_gates._PauliX: _x_pow,
++    common_gates.YPowGate: _y_pow,
++    common_gates.Ry: _y_pow,
++    pauli_gates._PauliY: _y_pow,
++    common_gates.ZPowGate: _z_pow,
++    common_gates.Rz: _z_pow,
++    pauli_gates._PauliZ: _z_pow,
++    common_gates.HPowGate: _h_pow,
++    phased_x_gate.PhasedXPowGate: _phased_x_pow,
++    phased_x_z_gate.PhasedXZGate: _phased_xz,
++    identity.IdentityGate: _identity,
++}
++
++
++def single_qubit_unitary(op: cirq.Operation) -> Matrix2 | complex | None:
++    """Returns the unitary of an operation on at most one qubit as plain Python numbers.
++
++    Args:
++        op: The operation.
++
++    Returns:
++        The tuple `(u00, u01, u10, u11)` for a unitary operation on one qubit, the complex
++        coefficient for a unitary operation on no qubits, and None for an operation without
++        a unitary or one acting on more than one qubit or on a qid that is not a qubit.
++    """
++    qubits = op.qubits
++    if len(qubits) > 1:
++        return None
++    if (not qubits or qubits[0].dimension == 2) and isinstance(
++        op.untagged, gate_operation.GateOperation
++    ):
++        gate = op.gate
++        closed_form = _CLOSED_FORMS.get(type(gate))
++        if closed_form is not None:
++            return closed_form(gate)
++        if type(gate) is global_phase_op.GlobalPhaseGate:
++            coefficient = gate.coefficient
++            return complex(coefficient) if isinstance(coefficient, (int, float, complex)) else None
++    u = protocols.unitary(op, None)
++    if u is None:
++        return None
++    if u.shape == (2, 2):
++        return complex(u[0, 0]), complex(u[0, 1]), complex(u[1, 0]), complex(u[1, 1])
++    if u.shape == (1, 1):
++        return complex(u[0, 0])
++    return None
++
++
++def multiply(a: Matrix2, b: Matrix2) -> Matrix2:
++    """Returns the matrix product `a @ b` of two one-qubit unitaries."""
++    a00, a01, a10, a11 = a
++    b00, b01, b10, b11 = b
++    return (
++        a00 * b00 + a01 * b10,
++        a00 * b01 + a01 * b11,
++        a10 * b00 + a11 * b10,
++        a10 * b01 + a11 * b11,
++    )
+diff --git a/cirq-core/cirq/transformers/analytical_decompositions/single_qubit_decompositions.py b/cirq-core/cirq/transformers/analytical_decompositions/single_qubit_decompositions.py
+--- a/cirq-core/cirq/transformers/analytical_decompositions/single_qubit_decompositions.py
++++ b/cirq-core/cirq/transformers/analytical_decompositions/single_qubit_decompositions.py
+@@ -16,12 +16,13 @@
+ 
+ from __future__ import annotations
+ 
++import cmath
+ import math
+ 
+ import numpy as np
+ import sympy
+ 
+-from cirq import linalg, ops, protocols
++from cirq import linalg, ops
+ from cirq.linalg.tolerance import near_zero_mod
+ 
+ 
+@@ -145,6 +146,10 @@
+ def _deconstruct_single_qubit_matrix_into_gate_turns(mat: np.ndarray) -> tuple[float, float, float]:
+     """Breaks down a 2x2 unitary into gate parameters.
+ 
++    The angles are those of `cirq.deconstruct_single_qubit_matrix_into_angles`, computed step by
++    step on the four entries of the matrix as Python complex numbers rather than with 2x2 numpy
++    products, which dominate the cost for a single small matrix.
++
+     Args:
+         mat: The 2x2 unitary matrix to break down.
+ 
+@@ -154,11 +159,34 @@
+        fractions of a whole turn, with values canonicalized into the range
+        [-0.5, 0.5).
+     """
+-    pre_phase, rotation, post_phase = linalg.deconstruct_single_qubit_matrix_into_angles(mat)
++    (u00, u01), (u10, u11) = np.asarray(mat).tolist()
++    # Adding 0j turns a signed zero into +0, as the 2x2 numpy products of the base do; the
++    # phase of an exact zero entry then matches `cirq.deconstruct_single_qubit_matrix_into_angles`.
++    u00, u01, u10, u11 = u00 + 0j, u01 + 0j, u10 + 0j, u11 + 0j
++
++    # Anti-cancel left-vs-right phase along top row.
++    right_phase = cmath.phase(u01 * u00.conjugate()) + math.pi
++    right = cmath.exp(-1j * right_phase)
++    u01 *= right
++    u11 *= right
++
++    # Cancel top-vs-bottom phase along left column.
++    bottom_phase = cmath.phase(u10 * u00.conjugate())
++    bottom = cmath.exp(-1j * bottom_phase)
++    u10 *= bottom
++    u11 *= bottom
++
++    # Lined up for a rotation. Clear the off-diagonal cells with one.
++    rotation = math.atan2(abs(u10), abs(u00))
++    c, s = math.cos(rotation), math.sin(rotation)
++
++    # Cancel top-left-vs-bottom-right phase.
++    diagonal_phase = cmath.phase((c * u11 - s * u01) * (c * u00 + s * u10).conjugate())
++    pre_phase, post_phase = right_phase + diagonal_phase, bottom_phase
+ 
+     # Figure out parameters of the actual gates we will do.
+     tau = 2 * np.pi
+-    xy_turn = rotation / tau
++    xy_turn = rotation / math.pi
+     xy_phase_turn = 0.25 - pre_phase / tau
+     total_z_turn = (post_phase + pre_phase) / tau
+ 
+@@ -183,25 +211,36 @@
+ 
+     xy_turn, xy_phase_turn, total_z_turn = _deconstruct_single_qubit_matrix_into_gate_turns(mat)
+ 
+-    # Build the intended operation out of non-negligible XY and Z rotations.
+-    result = [
+-        ops.PhasedXPowGate(exponent=2 * xy_turn, phase_exponent=2 * xy_phase_turn),
+-        ops.Z ** (2 * total_z_turn),
+-    ]
+-    result = [g for g in result if protocols.trace_distance_bound(g) > atol]
++    # Keep the non-negligible XY and Z rotations. The trace distance bounds are the ones
++    # `cirq.trace_distance_bound` gives for `cirq.PhasedXPowGate(exponent=2 * xy_turn)` and
++    # `cirq.Z ** (2 * total_z_turn)`, in closed form.
++    keep_xy = abs(math.sin(xy_turn * math.pi)) > atol
++    keep_z = _z_pow_trace_distance_bound(2 * total_z_turn) > atol
+ 
+     # Special case: XY half-turns can absorb Z rotations.
+-    if len(result) == 2 and math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
++    if keep_xy and keep_z and math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
+         return [ops.PhasedXPowGate(phase_exponent=2 * xy_phase_turn + total_z_turn)]
+ 
++    result: list[ops.Gate] = []
++    if keep_xy:
++        result.append(ops.PhasedXPowGate(exponent=2 * xy_turn, phase_exponent=2 * xy_phase_turn))
++    if keep_z:
++        result.append(ops.Z ** (2 * total_z_turn))
+     return result
++
++
++def _z_pow_trace_distance_bound(exponent: float) -> float:
++    """The trace distance bound of `cirq.Z**exponent`, from the gap between its eigenphases."""
++    gap = math.pi * (exponent % 2)
++    widest = max(2 * math.pi - gap, gap)
++    return 1.0 if widest <= math.pi else max(0.0, math.sin(0.5 * widest))
+ 
+ 
+ def single_qubit_matrix_to_phxz(mat: np.ndarray, atol: float = 0) -> ops.PhasedXZGate | None:
+     """Implements a single-qubit operation with a PhasedXZ gate.
+ 
+-    Under the hood, this uses deconstruct_single_qubit_matrix_into_angles which
+-    converts the given matrix to a series of three rotations around the Z, Y, Z
++    Under the hood, this computes the angles of deconstruct_single_qubit_matrix_into_angles,
++    which converts the given matrix to a series of three rotations around the Z, Y, Z
+     axes. This is then converted to a phased X rotation followed by a Z, in the
+     form of a single PhasedXZ gate.
+ 
+@@ -217,18 +256,20 @@
+ 
+     xy_turn, xy_phase_turn, total_z_turn = _deconstruct_single_qubit_matrix_into_gate_turns(mat)
+ 
+-    # Build the intended operation out of non-negligible XY and Z rotations.
+-    g = ops.PhasedXZGate(
++    # The trace distance of PhasedXZGate(a, x, z) from the identity, in closed form, is
++    # sqrt(sin^2(pi x / 2) + cos^2(pi x / 2) sin^2(pi z / 2)), here with x = 2 * xy_turn and
++    # z = 2 * total_z_turn.
++    x_sin, x_cos = math.sin(xy_turn * math.pi), math.cos(xy_turn * math.pi)
++    z_sin = math.sin(total_z_turn * math.pi)
++    if math.sqrt(x_sin * x_sin + x_cos * x_cos * z_sin * z_sin) <= atol:
++        return None
++
++    # Special case: XY half-turns can absorb Z rotations.
++    if math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
++        return ops.PhasedXZGate(
++            axis_phase_exponent=2 * xy_phase_turn + total_z_turn, x_exponent=1, z_exponent=0
++        )
++
++    return ops.PhasedXZGate(
+         axis_phase_exponent=2 * xy_phase_turn, x_exponent=2 * xy_turn, z_exponent=2 * total_z_turn
+     )
+-
+-    if protocols.trace_distance_bound(g) <= atol:
+-        return None
+-
+-    # Special case: XY half-turns can absorb Z rotations.
+-    if math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
+-        g = ops.PhasedXZGate(
+-            axis_phase_exponent=2 * xy_phase_turn + total_z_turn, x_exponent=1, z_exponent=0
+-        )
+-
+-    return g
+diff --git a/cirq-core/cirq/transformers/merge_k_qubit_gates.py b/cirq-core/cirq/transformers/merge_k_qubit_gates.py
+--- a/cirq-core/cirq/transformers/merge_k_qubit_gates.py
++++ b/cirq-core/cirq/transformers/merge_k_qubit_gates.py
+@@ -52,13 +52,19 @@
+                     merged_circuit_op_tag=merged_circuit_op_tag,
+                 ).freeze()
+             ).with_tags(*op.tags)
+-        if not (protocols.num_qubits(op) <= k and protocols.has_unitary(op)):
++        # A merged component only contains unitary operations acting on <= k qubits.
++        is_merged_component = merged_circuit_op_tag in op.tags
++        if not (
++            is_merged_component or (protocols.num_qubits(op) <= k and protocols.has_unitary(op))
++        ):
+             return op
+         if rewriter:
+             return rewriter(
+                 cast(circuits.CircuitOperation, op_untagged)
+-                if merged_circuit_op_tag in op.tags
+-                else circuits.CircuitOperation(circuits.FrozenCircuit(op))
++                if is_merged_component
++                else circuits.CircuitOperation(
++                    circuits.FrozenCircuit.from_moments(circuits.Moment.from_ops(op))
++                )
+             )
+         return ops.MatrixGate(protocols.unitary(op)).on(*op.qubits)
+ 
+diff --git a/cirq-core/cirq/transformers/merge_single_qubit_gates.py b/cirq-core/cirq/transformers/merge_single_qubit_gates.py
+--- a/cirq-core/cirq/transformers/merge_single_qubit_gates.py
++++ b/cirq-core/cirq/transformers/merge_single_qubit_gates.py
+@@ -16,10 +16,16 @@
+ 
+ from __future__ import annotations
+ 
++import cmath
++import math
+ from collections.abc import Callable, Hashable
+ from typing import cast, TYPE_CHECKING
+ 
++import numpy as np
++
+ from cirq import circuits, ops, protocols
++from cirq.circuits.circuit import CIRCUIT_TYPE
++from cirq.ops import single_qubit_unitary
+ from cirq.study.resolver import ParamResolver
+ from cirq.study.sweeps import dict_to_zip_sweep, ListSweep, ProductOrZipSweepLike, Sweep, Zip
+ from cirq.transformers import (
+@@ -37,6 +43,179 @@
+ 
+     import cirq
+ 
++_Matrix2 = single_qubit_unitary.Matrix2
++
++
++def _signed_mod_1(x: float) -> float:
++    return (x + 0.5) % 1 - 0.5
++
++
++def _gate_turns(u: _Matrix2) -> tuple[float, float, float]:
++    """Breaks down a 2x2 unitary into XY-rotation, XY-axis phase and Z turns.
++
++    Follows `cirq.deconstruct_single_qubit_matrix_into_angles` step by step on plain complex
++    numbers, then converts the angles to fractions of a turn in [-0.5, 0.5) as
++    `cirq.single_qubit_matrix_to_phxz` does.
++    """
++    u00, u01, u10, u11 = u
++    # Anti-cancel left-vs-right phase along the top row.
++    right_phase = cmath.phase(u01 * u00.conjugate()) + math.pi
++    r = cmath.exp(-1j * right_phase)
++    u11 *= r
++    # Cancel top-vs-bottom phase along the left column.
++    bottom_phase = cmath.phase(u10 * u00.conjugate())
++    b = cmath.exp(-1j * bottom_phase)
++    u10 *= b
++    u11 *= b
++    # Clear the off-diagonal cells with a rotation.
++    rotation = math.atan2(abs(u10), abs(u00))
++    c, s = math.cos(rotation), math.sin(rotation)
++    d00 = c * u00 + s * u10
++    d11 = -s * u01 * r + c * u11
++    # Cancel top-left-vs-bottom-right phase.
++    diagonal_phase = cmath.phase(d11 * d00.conjugate())
++    pre_phase, post_phase = right_phase + diagonal_phase, bottom_phase
++    tau = 2 * math.pi
++    return (
++        _signed_mod_1(2 * rotation / tau),
++        _signed_mod_1(0.25 - pre_phase / tau),
++        _signed_mod_1((post_phase + pre_phase) / tau),
++    )
++
++
++def _matrix_to_phxz(u: _Matrix2, atol: float) -> cirq.PhasedXZGate | None:
++    """`cirq.single_qubit_matrix_to_phxz` for a unitary given as a tuple of its entries."""
++    xy_turn, xy_phase_turn, total_z_turn = _gate_turns(u)
++    # Trace distance of PhasedXZ(a, x, z) from the identity in closed form, with x = 2 xy_turn
++    # and z = 2 total_z_turn: sqrt(sin^2(pi x / 2) + cos^2(pi x / 2) sin^2(pi z / 2)).
++    sx, cx, sz = (
++        math.sin(math.pi * xy_turn),
++        math.cos(math.pi * xy_turn),
++        math.sin(math.pi * total_z_turn),
++    )
++    if math.sqrt(sx * sx + cx * cx * sz * sz) <= atol:
++        return None
++    # XY half-turns can absorb Z rotations.
++    if math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
++        return ops.PhasedXZGate(
++            axis_phase_exponent=2 * xy_phase_turn + total_z_turn, x_exponent=1, z_exponent=0
++        )
++    return ops.PhasedXZGate(
++        axis_phase_exponent=2 * xy_phase_turn, x_exponent=2 * xy_turn, z_exponent=2 * total_z_turn
++    )
++
++
++def _eigen_trace_distance(exponent: float) -> float:
++    """Trace distance bound of an exponentiated gate with eigen shifts 0 and 1."""
++    gap = math.pi * (exponent % 2)
++    widest = max(2 * math.pi - gap, gap)
++    return 1.0 if widest <= math.pi else max(0.0, math.sin(0.5 * widest))
++
++
++def _matrix_to_phased_x_z(u: _Matrix2, atol: float) -> list[cirq.Gate]:
++    """`cirq.single_qubit_matrix_to_phased_x_z` for a unitary given as a tuple of its entries."""
++    xy_turn, xy_phase_turn, total_z_turn = _gate_turns(u)
++    keep_x = abs(math.sin(2 * xy_turn * 0.5 * math.pi)) > atol
++    keep_z = _eigen_trace_distance(2 * total_z_turn) > atol
++    # XY half-turns can absorb Z rotations.
++    if keep_x and keep_z and math.isclose(abs(xy_turn), 0.5, abs_tol=atol):
++        return [ops.PhasedXPowGate(phase_exponent=2 * xy_phase_turn + total_z_turn)]
++    result: list[cirq.Gate] = []
++    if keep_x:
++        result.append(ops.PhasedXPowGate(exponent=2 * xy_turn, phase_exponent=2 * xy_phase_turn))
++    if keep_z:
++        result.append(ops.Z ** (2 * total_z_turn))
++    return result
++
++
++def _run_unitary(circuit_op: cirq.CircuitOperation) -> _Matrix2 | complex:
++    """Returns the unitary of a merged run of operations acting on at most one qubit."""
++    u: _Matrix2 | complex | None = None
++    for op in circuit_op.circuit.all_operations():
++        op_u = single_qubit_unitary.single_qubit_unitary(op)
++        if op_u is None:
++            break
++        if u is None:
++            u = op_u
++        elif isinstance(op_u, complex) and isinstance(u, complex):
++            u *= op_u
++        elif isinstance(op_u, complex) or isinstance(u, complex):
++            break
++        else:
++            u = single_qubit_unitary.multiply(op_u, u)
++    else:
++        if u is not None:
++            return u
++    mat = protocols.unitary(circuit_op)
++    if mat.shape == (1, 1):
++        return complex(mat[0, 0])
++    return complex(mat[0, 0]), complex(mat[0, 1]), complex(mat[1, 0]), complex(mat[1, 1])
++
++
++def _merge_single_qubit_runs(
++    circuit: cirq.AbstractCircuit,
++    rewriter: Callable[[cirq.Qid, np.ndarray, list[cirq.Operation]], cirq.Operation],
++    tags_to_ignore: frozenset[Hashable],
++) -> cirq.Circuit:
++    """Replaces every run of single-qubit unitaries in `circuit` with one operation.
++
++    This gives the circuit of `cirq.merge_k_qubit_unitaries` with `k=1` and a rewriter producing
++    one operation per run, for a circuit whose circuit operations are not recursed into, without
++    building connected components or wrapping each run in a `cirq.CircuitOperation`. An operation
++    is mergeable if it is a unitary acting on at most one qubit and carries none of
++    `tags_to_ignore`. A run is a maximal sequence of mergeable operations on one qubit with no
++    other operation on that qubit in between; its unitary is accumulated while the operations are
++    visited, as a tuple of Python complex numbers (a numpy array on a qid that is not a qubit).
++    Each run is replaced, in the moment of its first operation, by
++    `rewriter(qubit, unitary, operations)`, and each mergeable operation on no qubits by a
++    `cirq.GlobalPhaseGate`. Moments left empty are dropped.
++    """
++    new_ops_by_moment: list[list[cirq.Operation]] = []
++    runs_by_moment: list[list[list]] = []
++    # The open run on each qubit, as [qubit, unitary so far, operations].
++    open_runs: dict[cirq.Qid, list] = {}
++    for moment in circuit:
++        new_ops: list[cirq.Operation] = []
++        started: list[list] = []
++        for op in moment:
++            u = None
++            if tags_to_ignore.isdisjoint(op.tags):
++                u = single_qubit_unitary.single_qubit_unitary(op)
++                if u is None and len(op.qubits) == 1:
++                    # `single_qubit_unitary` leaves out unitaries on qids that are not qubits.
++                    u = protocols.unitary(op, None)
++            if u is not None:
++                qubits = op.qubits
++                if not qubits:
++                    new_ops.append(ops.GlobalPhaseGate(cast(complex, u)).on())
++                    continue
++                run = open_runs.get(qubits[0])
++                if run is None:
++                    run = open_runs[qubits[0]] = [qubits[0], u, [op]]
++                    started.append(run)
++                else:
++                    if isinstance(u, tuple):
++                        run[1] = single_qubit_unitary.multiply(u, run[1])
++                    else:
++                        run[1] = u @ run[1]
++                    run[2].append(op)
++                continue
++            # The operation is kept as it is and ends the runs on its qubits.
++            new_ops.append(op)
++            for q in op.qubits:
++                open_runs.pop(q, None)
++        new_ops_by_moment.append(new_ops)
++        runs_by_moment.append(started)
++
++    moments = []
++    for new_ops, started in zip(new_ops_by_moment, runs_by_moment):
++        for q, u, run_ops in started:
++            mat = np.array(((u[0], u[1]), (u[2], u[3]))) if isinstance(u, tuple) else u
++            new_ops.append(rewriter(q, mat, run_ops))
++        if new_ops:
++            moments.append(circuits.Moment.from_ops(*new_ops))
++    return circuits.Circuit.from_moments(*moments)
++
+ 
+ @transformer_api.transformer
+ def merge_single_qubit_gates_to_phased_x_and_z(
+@@ -61,13 +240,11 @@
+     """
+ 
+     def rewriter(op: cirq.CircuitOperation) -> cirq.OP_TREE:
+-        u = protocols.unitary(op)
+-        if protocols.num_qubits(op) == 0:
+-            return ops.GlobalPhaseGate(u[0, 0]).on()
+-        return [
+-            g(op.qubits[0])
+-            for g in single_qubit_decompositions.single_qubit_matrix_to_phased_x_z(u, atol)
+-        ]
++        u = _run_unitary(op)
++        if isinstance(u, complex):
++            return ops.GlobalPhaseGate(u).on()
++        (q,) = op.circuit.all_qubits()
++        return [g(q) for g in _matrix_to_phased_x_z(u, atol)]
+ 
+     return merge_k_qubit_gates.merge_k_qubit_unitaries(
+         circuit, k=1, context=context, rewriter=rewriter
+@@ -98,17 +275,138 @@
+         Copy of the transformed input circuit.
+     """
+ 
++    def rewrite_run(
++        q: cirq.Qid, mat: np.ndarray, run_ops: list[cirq.Operation]
++    ) -> cirq.Operation:
++        gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(mat, atol) or ops.I
++        phxz_op = gate.on(q)
++        if merge_tags_fn:
++            circuit_op = circuits.CircuitOperation(circuits.FrozenCircuit(run_ops))
++            return phxz_op.with_tags(*merge_tags_fn(circuit_op))
++        return phxz_op
++
++    if not (context and context.deep):
++        return _merge_single_qubit_runs(
++            circuit, rewrite_run, frozenset(context.tags_to_ignore) if context else frozenset()
++        )
++
++    # Runs inside circuit operations are merged by `cirq.merge_k_qubit_unitaries`.
+     def rewriter(circuit_op: cirq.CircuitOperation) -> cirq.OP_TREE:
+-        u = protocols.unitary(circuit_op)
+-        if protocols.num_qubits(circuit_op) == 0:
+-            return ops.GlobalPhaseGate(u[0, 0]).on()
+-        gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(u, atol) or ops.I
+-        phxz_op = gate.on(circuit_op.qubits[0])
+-        return phxz_op.with_tags(*merge_tags_fn(circuit_op)) if merge_tags_fn else phxz_op
++        u = _run_unitary(circuit_op)
++        if isinstance(u, complex):
++            return ops.GlobalPhaseGate(u).on()
++        (q,) = circuit_op.circuit.all_qubits()
++        mat = np.array(((u[0], u[1]), (u[2], u[3])))
++        return rewrite_run(q, mat, list(circuit_op.circuit.all_operations()))
+ 
+     return merge_k_qubit_gates.merge_k_qubit_unitaries(
+         circuit, k=1, context=context, rewriter=rewriter
+     )
++
++
++def _merge_moment_runs(
++    circuit: CIRCUIT_TYPE,
++    atol: float,
++    tags_to_ignore: frozenset[Hashable],
++    deep: bool,
++    tags_to_skip: frozenset[Hashable],
++) -> CIRCUIT_TYPE:
++    """Merges every run of two or more mergeable moments of `circuit` into one moment.
++
++    A moment is mergeable when each of its operations is a unitary on at most one qubit (a qid
++    of dimension 2; an operation on a qid of any other dimension is not mergeable) not tagged
++    with `tags_to_ignore`. A run of a single mergeable moment is kept as it is. If `deep`,
++    circuit operations not tagged with `tags_to_skip`
++    are first processed recursively, and circuits nested within them are processed without
++    skipping any.
++    """
++    moments: list[cirq.Moment] = []
++    run: list[cirq.Moment] = []
++    by_qubit: dict[cirq.Qid, list] = {}
++    phase_ops: list[cirq.Operation] = []
++    phase = 1 + 0j
++
++    def flush() -> None:
++        nonlocal phase
++        if len(run) == 1:
++            moments.append(run[0])
++        elif run:
++            merged_ops: list[cirq.Operation] = []
++            for q, (first_op, count, u) in by_qubit.items():
++                if count == 1 and isinstance(first_op.gate, ops.PhasedXZGate):
++                    merged_ops.append(first_op)
++                    continue
++                gate = _matrix_to_phxz(u, atol)
++                if gate:
++                    merged_ops.append(gate.on(q))
++            if len(phase_ops) == 1:
++                merged_ops.append(phase_ops[0])
++            elif phase_ops:
++                merged_ops.append(ops.GlobalPhaseGate(phase).on())
++            moments.append(circuits.Moment.from_ops(*merged_ops))
++        run.clear()
++        by_qubit.clear()
++        phase_ops.clear()
++        phase = 1 + 0j
++
++    for moment in circuit:
++        if deep:
++            moment = _merge_moment_runs_in_circuit_ops(moment, atol, tags_to_ignore, tags_to_skip)
++        entries = []
++        for op in moment:
++            if not (
++                protocols.num_qubits(op) <= 1
++                and protocols.has_unitary(op)
++                and tags_to_ignore.isdisjoint(op.tags)
++            ):
++                break
++            u = single_qubit_unitary.single_qubit_unitary(op)
++            if u is None:
++                break
++            entries.append((op, u))
++        else:
++            run.append(moment)
++            for op, u in entries:
++                if isinstance(u, complex):
++                    phase_ops.append(op)
++                    phase *= u
++                    continue
++                q = op.qubits[0]
++                acc = by_qubit.get(q)
++                if acc is None:
++                    by_qubit[q] = [op, 1, u]
++                else:
++                    acc[1] += 1
++                    acc[2] = single_qubit_unitary.multiply(u, acc[2])
++            continue
++        flush()
++        moments.append(moment)
++    flush()
++    if isinstance(circuit, circuits.FrozenCircuit):
++        return cast(CIRCUIT_TYPE, circuits.FrozenCircuit.from_moments(*moments, tags=circuit.tags))
++    return cast(CIRCUIT_TYPE, circuits.Circuit.from_moments(*moments))
++
++
++def _merge_moment_runs_in_circuit_ops(
++    moment: cirq.Moment,
++    atol: float,
++    tags_to_ignore: frozenset[Hashable],
++    tags_to_skip: frozenset[Hashable],
++) -> cirq.Moment:
++    """Applies `_merge_moment_runs` to the circuits of the circuit operations in `moment`."""
++    if not any(isinstance(op.untagged, circuits.CircuitOperation) for op in moment):
++        return moment
++    new_ops: list[cirq.Operation] = []
++    for op in moment:
++        op_untagged = op.untagged
++        if isinstance(op_untagged, circuits.CircuitOperation) and tags_to_skip.isdisjoint(op.tags):
++            op = op_untagged.replace(
++                circuit=_merge_moment_runs(
++                    op_untagged.circuit, atol, tags_to_ignore, True, frozenset()
++                )
++            ).with_tags(*op.tags)
++        new_ops.append(op)
++    return circuits.Moment.from_ops(*new_ops)
+ 
+ 
+ @transformer_api.transformer
+@@ -120,6 +418,13 @@
+ ) -> cirq.Circuit:
+     """Merges adjacent moments with only 1-qubit rotations to a single moment with PhasedXZ gates.
+ 
++    Each run of two or more consecutive mergeable moments is merged in one step (a single
++    mergeable moment is kept as it is): the unitaries acting on each
++    qubit are multiplied together as 2x2 matrices of Python complex numbers and decomposed into a
++    single PhasedXZ gate, which is dropped if it is the identity within `atol`; a qubit with a
++    single PhasedXZ operation in the run keeps that operation. The global phase operations of the
++    run are combined into a single `cirq.GlobalPhaseGate` (a single one is kept as it is).
++
+     Args:
+         circuit: Input circuit to transform. It will not be modified.
+         context: `cirq.TransformerContext` storing common configurable options for transformers.
+@@ -129,49 +434,9 @@
+     Returns:
+         Copy of the transformed input circuit.
+     """
+-    tags_to_ignore = set(context.tags_to_ignore) if context else set()
+-
+-    def can_merge_moment(m: cirq.Moment):
+-        return all(
+-            protocols.num_qubits(op) <= 1
+-            and protocols.has_unitary(op)
+-            and tags_to_ignore.isdisjoint(op.tags)
+-            for op in m
+-        )
+-
+-    def merge_func(m1: cirq.Moment, m2: cirq.Moment) -> cirq.Moment | None:
+-        if not (can_merge_moment(m1) and can_merge_moment(m2)):
+-            return None
+-        ret_ops = []
+-        for q in m1.qubits | m2.qubits:
+-            op1, op2 = m1.operation_at(q), m2.operation_at(q)
+-            if op1 and op2:
+-                mat = protocols.unitary(op2) @ protocols.unitary(op1)
+-                gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(mat, atol)
+-                if gate:
+-                    ret_ops.append(gate(q))
+-            else:
+-                op = op1 or op2
+-                assert op is not None
+-                if isinstance(op.gate, ops.PhasedXZGate):
+-                    ret_ops.append(op)
+-                else:
+-                    gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(
+-                        protocols.unitary(op), atol
+-                    )
+-                    if gate:
+-                        ret_ops.append(gate(q))
+-        # Transfer global phase
+-        for op in m1.operations + m2.operations:
+-            if protocols.num_qubits(op) == 0:
+-                ret_ops.append(op)
+-        return circuits.Moment(ret_ops)
+-
+-    return transformer_primitives.merge_moments(
+-        circuit,
+-        merge_func,
+-        deep=context.deep if context else False,
+-        tags_to_ignore=tuple(tags_to_ignore),
++    tags_to_ignore = frozenset(context.tags_to_ignore) if context else frozenset()
++    return _merge_moment_runs(
++        circuit, atol, tags_to_ignore, context.deep if context else False, tags_to_ignore
+     ).unfreeze(copy=False)
+ 
+ 
+diff --git a/cirq-core/cirq/transformers/transformer_primitives.py b/cirq-core/cirq/transformers/transformer_primitives.py
+--- a/cirq-core/cirq/transformers/transformer_primitives.py
++++ b/cirq-core/cirq/transformers/transformer_primitives.py
+@@ -431,12 +431,26 @@
+                     ops.append(component_ops[c][0])
+                 else:
+                     ops.append(
+-                        circuits.CircuitOperation(
+-                            circuits.FrozenCircuit(component_ops[c])
+-                        ).with_tags(merged_circuit_op_tag)
++                        circuits.CircuitOperation(_component_circuit(component_ops[c])).with_tags(
++                            merged_circuit_op_tag
++                        )
+                     )
+-            moments.append(circuits.Moment(ops))
+-        return circuits.Circuit(moments)
++            moments.append(circuits.Moment.from_ops(*ops))
++        return circuits.Circuit.from_moments(*moments)
++
++
++def _component_circuit(component_ops: list[cirq.Operation]) -> cirq.FrozenCircuit:
++    """Returns the operations of a merged component inserted with the EARLIEST strategy.
++
++    When every operation acts on the same single qubit, each one takes its own moment in
++    order, so the moments are built directly instead of searching for a placement.
++    """
++    qubits = component_ops[0].qubits
++    if len(qubits) == 1 and all(op.qubits == qubits for op in component_ops):
++        return circuits.FrozenCircuit.from_moments(
++            *(circuits.Moment.from_ops(op) for op in component_ops)
++        )
++    return circuits.FrozenCircuit(component_ops)
+ 
+ 
+ def _merge_operations_impl(

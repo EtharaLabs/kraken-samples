@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+################################################################################
+# Runs pytest on the repository.
+#
+# Usage:
+#     check/pytest [--flags for pytest] [file-paths-relative-to-repo-root]
+#
+# You may specify pytest flags and specific files to test. The file paths
+# must be relative to the repository root. If no files are specified, everything
+# is tested.
+################################################################################
+
+# Get the working directory to the repo root.
+thisdir=$(dirname "${BASH_SOURCE[0]:?}") || exit $?
+repo_dir=$(git -C "${thisdir}" rev-parse --show-toplevel) || exit $?
+cd "${repo_dir}" || exit $?
+
+# Run in parallel by default.  Pass the `-n0` option for a single-process run.
+# (the last `-n` option wins)
+PYTEST_ARGS=( "-n=auto" "$@" )
+
+source dev_tools/pypath || exit $?
+
+pytest "${PYTEST_ARGS[@]}"
+RESULT=$?
+
+if [ "$RESULT" = 5 ]; then
+  echo "[exit 5] No tests collected, but ignored."
+  exit 0
+fi
+
+exit "$RESULT"

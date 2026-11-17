@@ -1,0 +1,2 @@
+reward=0.387385 (compiled plus judge J=0.6)
+{"reward": 0.387385}

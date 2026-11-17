@@ -1,0 +1,17 @@
+*
+!build/
+!build/**
+!rewardkit-requirements.txt
+!harness/
+!harness/**
+!test.sh
+!reward.toml
+!test_output.py
+!diag_correctness.py
+!diag_speedup.py
+!diag_noise.py
+!diag_stage.py
+!judge_guard.py
+!judge.toml
+!cheat-checks.json
+**/__pycache__

@@ -1,0 +1,24 @@
+{
+ "runner_uid": 10001,
+ "builder_uid": 10002,
+ "build_timeout_sec": 2400,
+ "child_timeout_sec": 900,
+ "pytest_timeout_sec": 1800,
+ "reps": 3,
+ "families": {
+  "F1": {"weight": 0.25, "cases": 8},
+  "F2": {"weight": 0.40, "cases": 8},
+  "F3": {"weight": 0.20, "cases": 8}
+ },
+ "judge_weight": 0.15,
+ "noise_floor": 0.05,
+ "noise_cap": 0.15,
+ "visible": {"seed": 20260729, "literals": ["20260729"]},
+ "test_selection": [
+  "sklearn/linear_model/tests"
+ ],
+ "covering_tests": [
+  "sklearn/linear_model/tests/test_coordinate_descent.py",
+  "sklearn/linear_model/tests/test_sparse_coordinate_descent.py"
+ ]
+}

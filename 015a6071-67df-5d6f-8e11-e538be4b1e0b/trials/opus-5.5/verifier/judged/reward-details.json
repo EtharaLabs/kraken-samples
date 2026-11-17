@@ -1,0 +1,117 @@
+{
+  "reward": {
+    "score": 0.6,
+    "criteria": [
+      {
+        "id": "d1_craft_diff_scope",
+        "name": "d1_craft_diff_scope",
+        "value": 0.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "The diff is confined to Cirq's single-qubit merge path: the unitary computation of small circuit operations, the single-qubit merge transformers in merge_single_qubit_gates.py, the moment-merging primitives they call, and any export of a helper they add. It carries no unrelated rewrites, reformatting or dead code (unused helpers, unreachable branches, commented-out code).",
+        "reasoning": "The diff also changes the general k-qubit rewriting path in merge_k_qubit_gates.py, affecting arbitrary k rather than only the specified single-qubit path or moment-merging primitives.",
+        "samples": [
+          1,
+          0,
+          0
+        ],
+        "agreement": 0.6667
+      },
+      {
+        "id": "d1_craft_comments_match",
+        "name": "d1_craft_comments_match",
+        "value": 0.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "Every docstring and comment the diff adds or changes describes what the new code actually does (for example which moments are merged at once, how repetitions are applied, how global phases are combined), and no existing docstring is left describing behaviour the code no longer has.",
+        "reasoning": "The new docstring says each mergeable run has its operations converted to PhasedXZ gates and multiple global phases combined. However, runs containing only one moment are passed through unchanged, so neither transformation occurs for those runs.",
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "rl2_process_global_cache",
+        "name": "rl2_process_global_cache",
+        "value": 1.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "The diff adds module-level, class-level or function-attribute state (for example a dict, lru_cache or functools.cache over gates, operations, circuits or matrices) that keeps computed unitaries, decompositions or merged results from one transformer call for reuse by a later call.",
+        "reasoning": "No persistent cache or other state retaining computed results across transformer calls is added. Matrices and operation collections are local to each call.",
+        "negate": true,
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "rl4_robustness_visible_special_case",
+        "name": "rl4_robustness_visible_special_case",
+        "value": 1.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "The diff special-cases the visible workload rather than speeding up the general path: it branches on its qubit layout, gate exponent, cycle count, circuit size, the CZ gauge transformer's output shape, or a threshold tuned to that script.",
+        "reasoning": "The branches concern general operation properties, repetition support, tags, and mergeable runs. None targets a workload-specific layout, exponent, cycle count, circuit size, or gauge-transformer output.",
+        "negate": true,
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "d1_outcome_work_not_deferred",
+        "name": "d1_outcome_work_not_deferred",
+        "value": 1.0,
+        "raw": 1,
+        "weight": 1.0,
+        "description": "The speedup comes from doing less work inside the transformer or unitary call, not from moving the work out of it: the diff does not return lazy circuits, moments or operations whose matrices or decompositions are computed only when the result is later read.",
+        "reasoning": "Matrix multiplication, repetition powers, gate decomposition, and moment construction are performed eagerly. Savings come from direct unitary computation, avoiding repeated eligibility checks, and decomposing once per qubit per merged run.",
+        "samples": [
+          1,
+          1,
+          1
+        ],
+        "agreement": 1.0
+      }
+    ],
+    "kind": "llm",
+    "judge": {
+      "model": "openai/gpt-6-astra",
+      "reasoning_effort": "medium",
+      "timeout": 300,
+      "files": [
+        "/logs/verifier/evidence/submission_diff.txt",
+        "/logs/verifier/evidence/test_log.txt",
+        "/logs/verifier/evidence/workload_output.json",
+        "/logs/verifier/evidence/timing_record.json",
+        "/logs/verifier/evidence/scan_record.json"
+      ],
+      "atif_trajectory": null,
+      "reference": null,
+      "mode": "batched",
+      "samples": 3,
+      "guard": "off"
+    },
+    "judge_output": "--- sample 1 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 1,\n    \"reasoning\": \"The changes concern single-qubit CircuitOperation unitaries, single-qubit moment merging, and the shared merge rewriter used by the single-qubit merge path. No unrelated changes or dead code are evident.\"\n  },\n  \"d1_craft_comments_match\": {\n    \"score\": 0,\n    \"reasoning\": \"The new docstring says each mergeable run is converted to PhasedXZ gates and its global phases combined, but the implementation processes only runs containing multiple moments. A singleton mergeable moment is preserved unchanged, including non-PhasedXZ gates and multiple global phases.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"All added matrices, operation groups, and merged results are local to the current invocation. No persistent cache is added.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The branches use general semantic properties such as qubit count, supported repetitions, mergeability, and gate type. None targets the visible workload's layout, size, exponents, or cycle count.\"\n  },\n  \"d1_outcome_work_not_deferred\": {\n    \"score\": 1,\n    \"reasoning\": \"Matrix multiplication, repetition powers, gate decomposition, and moment construction occur eagerly. Savings come from avoiding decomposition and repeated validation and merging entire runs before converting their matrices.\"\n  }\n}\n\n--- sample 2 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 0,\n    \"reasoning\": \"The change to merge_k_qubit_gates.py alters the general k-qubit rewrite eligibility check, beyond the specified single-qubit transformers, small-circuit unitary computation, and moment-merging primitives.\"\n  },\n  \"d1_craft_comments_match\": {\n    \"score\": 0,\n    \"reasoning\": \"The new docstring says each mergeable run has its operations converted to PhasedXZ gates and multiple global phases combined. However, runs containing only one moment are passed through unchanged, so neither transformation occurs for those runs.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"No persistent cache or other state retaining computed results across transformer calls is added. Matrices and operation collections are local to each call.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The branches concern general operation properties, repetition support, tags, and mergeable runs. None targets a workload-specific layout, exponent, cycle count, circuit size, or gauge-transformer output.\"\n  },\n  \"d1_outcome_work_not_deferred\": {\n    \"score\": 1,\n    \"reasoning\": \"Matrix multiplication, repetition powers, gate decomposition, and moment construction are performed eagerly. Savings come from direct unitary computation, avoiding repeated eligibility checks, and decomposing once per qubit per merged run.\"\n  }\n}\n\n--- sample 3 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 0,\n    \"reasoning\": \"The diff also changes the general k-qubit rewriting path in merge_k_qubit_gates.py, affecting arbitrary k rather than only the specified single-qubit path or moment-merging primitives.\"\n  },\n  \"d1_craft_comments_match\": {\n    \"score\": 0,\n    \"reasoning\": \"The added docstring says each mergeable run has its operations converted and its global phases combined, but singleton runs bypass merge_run entirely and remain unchanged.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"No persistent cache or other state retaining computed results across transformer calls is added. Accumulation structures are local to each call.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The branches concern general semantic properties such as qubit count, integer repetitions, tags, and mergeable runs; none targets the visible workload's layout, exponents, size, or gauge output.\"\n  },\n  \"d1_outcome_work_not_deferred\": {\n    \"score\": 1,\n    \"reasoning\": \"Matrix multiplication, repetition powers, gate decomposition, and moment construction happen eagerly. The optimization reduces repeated checks and decompositions without deferring work until the result is read.\"\n  }\n}",
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "cost_usd": 0.0,
+      "models": {
+        "openai/gpt-6-astra": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cost_usd": 0.0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+name: Continuous Integration - Weekly
+
+on:
+  schedule:
+    # Checks out main by default.
+    - cron: '0 0 * * 0'
+
+  # Allow manual invocation.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+# Declare default permissions as read only.
+permissions: read-all
+
+jobs:
+  notebooks-stable:
+    if: github.repository_owner == 'quantumlib'
+    name: All Notebooks Isolated Test against Cirq stable
+    env:
+      NOTEBOOK_PARTITIONS: 4
+    strategy:
+      matrix:
+        # partitions should be named partition-0 to partition-(NOTEBOOK_PARTITIONS-1)
+        partition: [partition-0, partition-1, partition-2, partition-3]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+          architecture: 'x64'
+      - name: Install requirements
+        run: pip install -r dev_tools/requirements/isolated-base.env.txt
+      - name: Notebook tests
+        run: check/pytest -n logical -m weekly dev_tools/notebooks/isolated_notebook_test.py -k ${{matrix.partition}}
+      - name: Persist the outputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: notebook-outputs
+          path: out

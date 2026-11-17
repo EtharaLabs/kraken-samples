@@ -1,0 +1,8 @@
+{
+ "pytest_timeout_sec": 2400,
+ "runner_uid": 10001,
+ "test_files": [
+  "statsmodels/tsa/tests/test_stattools.py",
+  "statsmodels/tsa/tests/test_lagselect.py"
+ ]
+}

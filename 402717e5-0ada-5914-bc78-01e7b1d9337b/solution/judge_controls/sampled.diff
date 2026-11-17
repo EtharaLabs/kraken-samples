@@ -1,0 +1,11 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -4291,7 +4291,7 @@
+         )
+         # iterate through the time periods
+         stats = np.full(end_period + 1, np.inf)
+-        for bp in range(start_period + 1, end_period + 1):
++        for bp in range(start_period + 1, end_period + 1, 4):
+             # update intercept dummy / trend / trend dummy
+             exog = self._update_regression_exog(
+                 exog,

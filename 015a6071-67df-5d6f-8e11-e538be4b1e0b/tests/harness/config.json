@@ -1,0 +1,25 @@
+{
+ "runner_uid": 10001,
+ "child_timeout_sec": 900,
+ "pytest_timeout_sec": 1800,
+ "reps": 3,
+ "families": {
+  "F1": {"weight": 0.25, "cases": 6},
+  "F2": {"weight": 0.40, "cases": 6},
+  "F3": {"weight": 0.20, "cases": 8}
+ },
+ "judge_weight": 0.15,
+ "noise_floor": 0.05,
+ "noise_cap": 0.15,
+ "visible": {"seed": 20260801, "literals": ["20260801"]},
+ "test_selection": [
+  "cirq-core/cirq/transformers",
+  "cirq-core/cirq/circuits",
+  "cirq-core/cirq/protocols/unitary_protocol_test.py"
+ ],
+ "covering_tests": [
+  "cirq-core/cirq/circuits/circuit_operation_test.py",
+  "cirq-core/cirq/transformers/merge_single_qubit_gates_test.py",
+  "cirq-core/cirq/transformers/merge_k_qubit_gates_test.py"
+ ]
+}

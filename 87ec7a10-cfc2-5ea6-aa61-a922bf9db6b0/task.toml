@@ -1,0 +1,81 @@
+schema_version = "1.4"
+reward_type = "bounded_continuous"
+
+# D1: the modified repository working tree. Harbor snapshots it out of the agent
+# container and re-materializes it at the same path in the separate verifier.
+artifacts = [
+  { source = "/app/pennylane", exclude = [".git", "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info", "build"] },
+]
+
+[task]
+name = "ethara/87ec7a10-cfc2-5ea6-aa61-a922bf9db6b0"
+version = "0.1.0"
+description = "Make PennyLane program capture of long circuits faster without changing any captured program. Continuous reward: per-circuit-kind speedup on hidden, seed-randomized circuits relative to a reference solution, zero on any changed program, failed covering test, or red line."
+authors = [{ name = "ankit.ethara", email = "ankit.ethara@ethara.ai" }]
+keywords = ["python", "pennylane", "jax", "program-capture", "performance-optimization", "credit-assignment", "continuous-reward"]
+
+[metadata]
+null_floor = 0.0
+discrimination_weight = 0.5
+platforms = ["linux/amd64", "linux/arm64"]
+archetype = "perf-optimization-fn"
+category = "credit-assignment"
+tags = ["optimization", "bounded-continuous"]
+
+[agent]
+timeout_sec = 7200.0
+network_mode = "no-network"
+user = "1000:1000"
+
+[verifier]
+timeout_sec = 5400.0
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+environment_mode = "separate"
+# The harness must demote every run of submission code to a restricted uid with a
+# fresh HOME and TMPDIR and no write access to the harness or the measurement record.
+user = "root"
+
+# Optional judge: Harbor Reward Kit on the tester's own OpenAI API key. With OPENAI_API_KEY
+# unset the reward is the compiled score and the verifier calls nothing over the network.
+# The judge must be an OpenAI model (the tasks were authored with Claude); any other judge,
+# or a failed judge call, keeps the compiled reward.
+[verifier.env]
+REWARDKIT_JUDGE = "${REWARDKIT_JUDGE:-openai/gpt-5.6-sol}"
+OPENAI_API_KEY = "${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+LITELLM_LOCAL_MODEL_COST_MAP = "True"
+
+[verifier.environment]
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 6144
+storage_mb = 20480
+gpus = 0
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 6144
+storage_mb = 20480
+gpus = 0
+
+[metadata.contamination]
+public_source = "https://github.com/PennyLaneAI/pennylane/pull/10298"
+public_since = "2026-10-14"
+note = "The reference solution is a public upstream pull request (Apache-2.0). Models trained on data after 2026-10-14 may have seen the fix; treat scores from such models as possibly memorized."
+
+[metadata.task_spec]
+editable_surface = "/app/pennylane/pennylane/ (the library package only)"
+output_location = "the edited /app/pennylane tree, snapshotted in place for the separate verifier"
+output_schema = "captured jaxpr programs identical to the unmodified library: the same equations in the same order"
+units = "wall-clock seconds of the first jax.make_jaxpr call in a fresh interpreter; minimum of 5 repetitions per hidden size"
+ordering = "the equation order of every captured program must equal the base library's"
+speed_floor = "per circuit kind, at least 1.25x faster than the base library at every hidden size (tau = 1.25), otherwise that kind scores 0"
+full_credit = "per circuit kind, within 1.2x of the reference speedup (kappa = 1.20) at the worst hidden size"
+family_weights = "cnot, ctrl, adj and adjctrl 1/8 each; one qp.prod over many factors 1/2"
+reward = "(55 * compiled + 11 * judged) / 66 when no gate fails; 0 on a changed program, a failed covering test, or a red line"
+tolerance_disclosure = "speed thresholds are hidden from the agent by design, as in the reference benchmark (SWE-fficiency); the instruction states the obligation, not the thresholds"

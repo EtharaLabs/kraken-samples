@@ -1,0 +1,238 @@
+{
+ "api": {
+  "base": {
+   "arraysetops_all": [
+    "ediff1d",
+    "intersect1d",
+    "isin",
+    "setdiff1d",
+    "setxor1d",
+    "union1d",
+    "unique",
+    "unique_all",
+    "unique_counts",
+    "unique_inverse",
+    "unique_values"
+   ],
+   "ediff1d": "(ary, to_end=None, to_begin=None)",
+   "has_in1d": false,
+   "intersect1d": "(ar1, ar2, assume_unique=False, return_indices=False)",
+   "isin": "(element, test_elements, assume_unique=False, invert=False, *, kind=None)",
+   "setdiff1d": "(ar1, ar2, assume_unique=False)",
+   "setxor1d": "(ar1, ar2, assume_unique=False)",
+   "stringdtype_public": [
+    "alignment",
+    "base",
+    "byteorder",
+    "char",
+    "coerce",
+    "descr",
+    "fields",
+    "flags",
+    "hasobject",
+    "isalignedstruct",
+    "isbuiltin",
+    "isnative",
+    "itemsize",
+    "kind",
+    "metadata",
+    "na_object",
+    "name",
+    "names",
+    "ndim",
+    "newbyteorder",
+    "num",
+    "shape",
+    "str",
+    "subdtype",
+    "type"
+   ],
+   "union1d": "(ar1, ar2)",
+   "unique": "(ar, return_index=False, return_inverse=False, return_counts=False, axis=None, *, equal_nan=True, sorted=True)",
+   "unique_all": "(x)",
+   "unique_counts": "(x)",
+   "unique_inverse": "(x)",
+   "unique_values": "(x)"
+  },
+  "equal": true,
+  "patch": {
+   "arraysetops_all": [
+    "ediff1d",
+    "intersect1d",
+    "isin",
+    "setdiff1d",
+    "setxor1d",
+    "union1d",
+    "unique",
+    "unique_all",
+    "unique_counts",
+    "unique_inverse",
+    "unique_values"
+   ],
+   "ediff1d": "(ary, to_end=None, to_begin=None)",
+   "has_in1d": false,
+   "intersect1d": "(ar1, ar2, assume_unique=False, return_indices=False)",
+   "isin": "(element, test_elements, assume_unique=False, invert=False, *, kind=None)",
+   "setdiff1d": "(ar1, ar2, assume_unique=False)",
+   "setxor1d": "(ar1, ar2, assume_unique=False)",
+   "stringdtype_public": [
+    "alignment",
+    "base",
+    "byteorder",
+    "char",
+    "coerce",
+    "descr",
+    "fields",
+    "flags",
+    "hasobject",
+    "isalignedstruct",
+    "isbuiltin",
+    "isnative",
+    "itemsize",
+    "kind",
+    "metadata",
+    "na_object",
+    "name",
+    "names",
+    "ndim",
+    "newbyteorder",
+    "num",
+    "shape",
+    "str",
+    "subdtype",
+    "type"
+   ],
+   "union1d": "(ar1, ar2)",
+   "unique": "(ar, return_index=False, return_inverse=False, return_counts=False, axis=None, *, equal_nan=True, sorted=True)",
+   "unique_all": "(x)",
+   "unique_counts": "(x)",
+   "unique_inverse": "(x)",
+   "unique_values": "(x)"
+  }
+ },
+ "cases": {
+  "1521064351": {
+   "base_raises": [
+    31,
+    32,
+    33,
+    34,
+    35,
+    41,
+    127,
+    128,
+    129,
+    130,
+    131,
+    137,
+    138,
+    139,
+    140,
+    141,
+    143,
+    144,
+    147,
+    149,
+    150,
+    151,
+    156,
+    157,
+    159,
+    171,
+    184,
+    187,
+    190,
+    193,
+    196,
+    202,
+    205
+   ],
+   "count": 207,
+   "equal": true,
+   "graded": 174,
+   "mismatched_cases": [],
+   "patch_failure": null
+  },
+  "1792677116": {
+   "base_raises": [
+    31,
+    32,
+    33,
+    34,
+    35,
+    41,
+    127,
+    128,
+    129,
+    130,
+    131,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    147,
+    149,
+    150,
+    151,
+    156,
+    157,
+    159,
+    171,
+    184,
+    187,
+    190,
+    193,
+    196,
+    202,
+    205
+   ],
+   "count": 207,
+   "equal": true,
+   "graded": 173,
+   "mismatched_cases": [],
+   "patch_failure": null
+  }
+ },
+ "timed": {
+  "mixed:22983x3490": {
+   "equal": true
+  },
+  "mixed:40594x3706": {
+   "equal": true
+  },
+  "nan:31526x2654": {
+   "equal": true
+  },
+  "nan:45464x3311": {
+   "equal": true
+  },
+  "none:22928x3957": {
+   "equal": true
+  },
+  "none:50202x2239": {
+   "equal": true
+  },
+  "object:21987x2492": {
+   "equal": true
+  },
+  "object:41065x3913": {
+   "equal": true
+  },
+  "plain:30037x2902": {
+   "equal": true
+  },
+  "plain:41207x2053": {
+   "equal": true
+  },
+  "str_na:33179x3413": {
+   "equal": true
+  },
+  "str_na:56854x3570": {
+   "equal": true
+  }
+ }
+}

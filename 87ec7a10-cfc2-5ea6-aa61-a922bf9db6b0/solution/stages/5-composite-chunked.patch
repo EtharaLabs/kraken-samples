@@ -1,0 +1,37 @@
+diff --git a/pennylane/core/queuing.py b/pennylane/core/queuing.py
+--- a/pennylane/core/queuing.py
++++ b/pennylane/core/queuing.py
+@@ -440,15 +440,16 @@ class AnnotatedQueue(OrderedDict):
+         return super().__contains__(key)
+ 
+ 
+-def remove_from_program(op):
++def remove_from_program(*ops):
+     """Removes an operator from the captured/queued program."""
+     if QueuingManager.recording():
+-        QueuingManager.remove(op)
++        for op in ops:
++            QueuingManager.remove(op)
+     if capture.enabled():
+         # pylint: disable-next=import-outside-toplevel
+         from .operator.operator2 import _pop_op_eqns_backward  # tach-ignore
+ 
+-        _pop_op_eqns_backward((op,))
++        _pop_op_eqns_backward(ops)
+ 
+ 
+ __all__ = ["QueuingManager", "AnnotatedQueue", "remove_from_program"]
+diff --git a/pennylane/ops/op_math/composite2.py b/pennylane/ops/op_math/composite2.py
+--- a/pennylane/ops/op_math/composite2.py
++++ b/pennylane/ops/op_math/composite2.py
+@@ -63,8 +63,8 @@ class CompositeOp2(Operator2, is_baseclass=True):
+                 self._build_pauli_rep() if _init_pauli_rep is None else _init_pauli_rep
+             )
+ 
+-        for op in self:
+-            remove_from_program(op)
++        for start in range(0, len(operands), 8):
++            remove_from_program(*operands[start : start + 8])
+ 
+     # FIX: This is a temporary work-around. Long-term fix is to remove `_init_pauli_rep`
+     # from the constructor [sc-130145].

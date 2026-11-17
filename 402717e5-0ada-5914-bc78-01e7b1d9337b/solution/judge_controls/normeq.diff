@@ -1,0 +1,78 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -4289,31 +4289,52 @@
+         endog, exog = self._format_regression_data(
+             x, nobs, c_const, t_const, basecols, baselags
+         )
+-        # iterate through the time periods
+         stats = np.full(end_period + 1, np.inf)
+-        for bp in range(start_period + 1, end_period + 1):
+-            # update intercept dummy / trend / trend dummy
+-            exog = self._update_regression_exog(
+-                exog,
+-                regression,
+-                bp,
+-                nobs,
+-                c_const,
+-                t_const,
+-                basecols,
+-                baselags,
+-            )
+-            # check exog rank on first iteration
+-            if bp == start_period + 1:
+-                o = OLS(endog[baselags:], exog, hasconst=1).fit()
+-                if o.df_model < exog.shape[1] - 1:
+-                    raise ValueError(
+-                        "ZA: auxiliary exog matrix is not full rank.\n"
+-                        f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
+-                    )
+-                stats[bp] = o.tvalues[basecols - 1]
++        periods = np.arange(start_period + 1, end_period + 1)
++        y = endog[baselags:]
++        nreg = exog.shape[0]
++        fixed = np.column_stack(
++            [np.full(nreg, c_const), t_const[(baselags + 2) : (nobs + 1)],
++             exog[:, basecols - 1], exog[:, basecols:]]
++        )
++        level_col = 2
++        data = np.column_stack([fixed, y])
++        cross = data.T @ data
++        first = periods - (baselags + 1) - (1 if regression == "t" else 0)
++        first = np.clip(first, 0, nreg - 1)
++        tail = np.cumsum(data[::-1], axis=0)[::-1]
++        tail2 = np.cumsum(tail[::-1], axis=0)[::-1]
++        length = (nreg - first).astype(float)
++        kf = fixed.shape[1]
++        nd = 2 if regression == "ct" else 1
++        for lo in range(0, periods.shape[0], 512):
++            sl = slice(lo, lo + 512)
++            f, ln = first[sl], length[sl]
++            m = f.shape[0]
++            zd = np.empty((m, kf + 1, nd))
++            dd = np.empty((m, nd, nd))
++            if regression == "t":
++                zd[:, :, 0] = tail2[f]
++                dd[:, 0, 0] = ln * (ln + 1) * (2 * ln + 1) / 6
+             else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                zd[:, :, 0] = tail[f]
++                dd[:, 0, 0] = ln
++                if regression == "ct":
++                    zd[:, :, 1] = tail2[f]
++                    dd[:, 1, 1] = ln * (ln + 1) * (2 * ln + 1) / 6
++                    dd[:, 0, 1] = dd[:, 1, 0] = ln * (ln + 1) / 2
++            k = kf + nd
++            a = np.empty((m, k, k))
++            a[:, :kf, :kf] = cross[:kf, :kf]
++            a[:, :kf, kf:] = zd[:, :kf]
++            a[:, kf:, :kf] = zd[:, :kf].transpose(0, 2, 1)
++            a[:, kf:, kf:] = dd
++            rhs = np.concatenate([np.broadcast_to(cross[:kf, kf], (m, kf)), zd[:, kf]], axis=1)
++            ainv = np.linalg.inv(a)
++            coef = np.einsum("pij,pj->pi", ainv, rhs)
++            ssr = cross[kf, kf] - np.einsum("pi,pi->p", coef, rhs)
++            sigma2 = ssr / (nreg - k)
++            stats[periods[sl]] = coef[:, level_col] / np.sqrt(sigma2 * ainv[:, level_col, level_col])
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

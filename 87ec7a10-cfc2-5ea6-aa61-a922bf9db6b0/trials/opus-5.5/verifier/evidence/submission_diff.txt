@@ -1,0 +1,32 @@
+changed paths: {"applied": ["pennylane/core/operator/operator2.py"], "ignored": [], "protected": []}
+
+--- a/pennylane/core/operator/operator2.py
++++ b/pennylane/core/operator/operator2.py
+@@ -1991,6 +1991,13 @@
+     These equations must be deleted because operators used as data are treated as
+     pytrees wrapping dynamic data rather than instructions. Thus, the equation that
+     corresponds to the operator as an instruction should be removed.
++
++    Operators are processed in the order given, and the removed equations are returned
++    in that same order. For each operator with a tracer, the frame's equations are
++    searched from the most recent backwards, and the search stops at the first equation
++    that produced the operator's tracer, which is removed in place. Since operators used
++    as data are usually created just before they are consumed, this keeps removal cheap
++    for long programs.
+     """
+     old_eqns = []
+ 
+@@ -2003,7 +2010,12 @@
+             # for some reason the frame now wraps equations in lambdas
+             eqn = op.tracer.parent
+             old_eqns.append(eqn)
+-            frame.tracing_eqns = [r for r in frame.tracing_eqns if r() is not eqn]
++            tracing_eqns = frame.tracing_eqns
++            # an equation is recorded once, so stop at the most recent match
++            for i in range(len(tracing_eqns) - 1, -1, -1):
++                if tracing_eqns[i]() is eqn:
++                    del tracing_eqns[i]
++                    break
+ 
+             # delete reference to tracer after its equation has been deleted
+             op.tracer = None

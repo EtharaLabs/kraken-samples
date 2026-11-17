@@ -1,0 +1,374 @@
+# Copyright 2025 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Unit tests for the data structures used for resource estimation in the decomposition module."""
+
+import pytest
+
+import pennylane as qp
+from pennylane.core.operator import Operator1, abstractify
+from pennylane.decomposition.resources import (
+    CompressedResourceOp,
+    Resources,
+    adjoint_resource_rep,
+    controlled_resource_rep,
+    pow_resource_rep,
+    resource_rep,
+)
+from pennylane.ops.op_math.adjoint2 import _adjoint_abstract
+from pennylane.ops.op_math.controlled2 import _ctrl_abstract
+from pennylane.ops.op_math.pow2 import _pow_abstract
+from pennylane.typing import Float, Wire
+
+
+class DummyRX(Operator1):  # pylint: disable=too-few-public-methods
+    """A dummy RX that still inherits from Operator1."""
+
+
+@pytest.mark.unit
+class TestResources:
+    """Unit tests for the Resources data structure."""
+
+    def test_resource_initialize(self):
+        """Tests initializing a Resources object."""
+        resources = Resources()
+        assert resources.num_gates == 0
+        assert resources.gate_counts == {}
+        assert resources.weighted_cost == 0.0
+
+    def test_negative_gate_counts(self):
+        """Tests that an error is raised if the gate count is negative."""
+        with pytest.raises(AssertionError):
+            Resources(
+                gate_counts={
+                    abstractify(DummyRX): 2,
+                    abstractify(qp.RZ): -1,
+                }
+            )
+
+    def test_negative_weighted_cost(self):
+        """Tests that an error is raised if the cost is negative."""
+        with pytest.raises(AssertionError):
+            Resources(
+                gate_counts={
+                    abstractify(DummyRX): 2,
+                },
+                weighted_cost=-2.0,
+            )
+
+    def test_add_resources(self):
+        """Tests adding two Resources objects."""
+
+        resources1 = Resources(
+            gate_counts={abstractify(DummyRX): 2, abstractify(qp.RZ): 1},
+            weighted_cost=6.0,
+        )
+        resources2 = Resources(
+            gate_counts={abstractify(DummyRX): 1, abstractify(qp.RY): 1},
+            weighted_cost=2.0,
+        )
+
+        resources = resources1 + resources2
+        assert resources.num_gates == 5
+        assert resources.gate_counts == {
+            abstractify(DummyRX): 3,
+            abstractify(qp.RZ): 1,
+            abstractify(qp.RY): 1,
+        }
+        assert resources.weighted_cost == 8.0
+
+    def test_mul_resource_with_scalar(self):
+        """Tests multiplying a Resources object with a scalar."""
+
+        resources = Resources(
+            gate_counts={abstractify(DummyRX): 2, abstractify(qp.RZ): 1},
+            weighted_cost=2.0,
+        )
+
+        resources = resources * 2
+        assert resources.num_gates == 6
+        assert resources.gate_counts == {
+            abstractify(DummyRX): 4,
+            abstractify(qp.RZ): 2,
+        }
+        assert resources.weighted_cost == 4
+
+    def test_repr(self):
+        """Tests the __repr__ of a Resources object."""
+
+        resources = Resources({abstractify(DummyRX): 2, qp.S(Wire[1]): 1}, 5.0)
+        assert repr(resources) == "<num_gates=3, gate_counts={DummyRX: 2, S: 1}, weighted_cost=5.0>"
+
+
+class DummyOp(qp.operation.Operator):  # pylint: disable=too-few-public-methods
+    resource_keys = {"foo", "bar"}
+
+
+@pytest.mark.unit
+class TestCompressedResourceOp:
+    """Unit tests for the CompressedResourceOp data structure."""
+
+    def test_initialization(self):
+        """Tests creating a CompressedResourceOp object."""
+
+        op = CompressedResourceOp(qp.QFT, {"num_wires": 5})
+        assert op.op_type is qp.QFT
+        assert op.params == {"num_wires": 5}
+
+        op = CompressedResourceOp(DummyRX, {})
+        assert op.op_type is DummyRX
+        assert op.params == {}
+
+    def test_invalid_op_type(self):
+        """Tests that an error is raised if the op is invalid."""
+
+        with pytest.raises(TypeError, match="op_type must be an Operator type"):
+            CompressedResourceOp("RX", {})
+
+        with pytest.raises(TypeError, match="op_type must be a subclass of Operator"):
+            CompressedResourceOp(int, {})
+
+    def test_hash(self):
+        """Tests that a CompressedResourceOp object is hashable."""
+
+        op = CompressedResourceOp(DummyRX, {})
+        assert isinstance(hash(op), int)
+
+        op = CompressedResourceOp(qp.QFT, {"num_wires": 5})
+        assert isinstance(hash(op), int)
+
+        op = CompressedResourceOp(
+            qp.ops.Controlled,
+            {
+                "base_class": qp.QFT,
+                "base_params": {"num_wires": 5},  # nested dictionary in params
+                "num_control_wires": 1,
+                "num_zero_control_values": 1,
+                "num_work_wires": 1,
+            },
+        )
+        assert isinstance(hash(op), int)
+
+    def test_hash_unhashable_keys(self):
+        """Tests that a CompressedResourceOp is hashable when the params contain unhashable keys."""
+
+        op = CompressedResourceOp(
+            qp.ops.Exp,
+            {
+                "base_class": qp.ops.LinearCombination,
+                "base_params": {},
+                "base_pauli_rep": qp.Hamiltonian(
+                    [1.11, 0.12, -3.4, 5],
+                    [qp.X(0) @ qp.X(1), qp.Z(2), qp.Y(0) @ qp.Y(1), qp.I((0, 1, 2))],
+                ).pauli_rep,
+                "coeff": 1.2j,
+            },
+        )
+        assert isinstance(hash(op), int)
+
+    def test_hash_list_params(self):
+        """Tests when the resource params contains a list."""
+
+        class CustomOp(qp.operation.Operator):  # pylint: disable=too-few-public-methods
+            resource_keys = {"foo", "bar"}
+
+            @property
+            def resource_params(self) -> dict:
+                return {"foo": [1, 2, 3], "bar": [1, 2, [3, 4, 5]]}
+
+        op = CompressedResourceOp(CustomOp, {"foo": [1, 2, 3], "bar": [1, 2, [3, 4, 5]]})
+        assert isinstance(hash(op), int)
+
+    def test_same_params_same_hash(self):
+        """Tests that two ops with the same params have the same hash."""
+
+        op1 = CompressedResourceOp(DummyRX, {"a": 1, "b": 2})
+        op2 = CompressedResourceOp(DummyRX, {"b": 2, "a": 1})
+        assert hash(op1) == hash(op2)
+
+    def test_empty_params_same_hash(self):
+        """Tests that CompressedResourceOp objects initialized with or without empty
+        parameters have the same hash."""
+        op1 = CompressedResourceOp(DummyRX)
+        op2 = CompressedResourceOp(DummyRX, {})
+        assert hash(op1) == hash(op2)
+
+    def test_different_params_different_hash(self):
+        """Tests that CompressedResourceOp objects initialized with different parameters
+        have different hashes."""
+        op1 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 5})
+        op2 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 6})
+        assert hash(op1) != hash(op2)
+
+    def test_equal(self):
+        """Tests comparing two CompressedResourceOp objects."""
+
+        op1 = CompressedResourceOp(DummyRX, {})
+        op2 = CompressedResourceOp(DummyRX, {})
+        assert op1 == op2
+
+        op1 = CompressedResourceOp(DummyRX, {})
+        op2 = abstractify(qp.RZ)
+        assert op1 != op2
+
+        op1 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 3})
+        op2 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 3})
+        assert op1 == op2
+
+        op1 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 5})
+        op2 = CompressedResourceOp(qp.MultiRZ, {"num_wires": 6})
+        assert op1 != op2
+
+        op1 = CompressedResourceOp(
+            qp.ops.Prod, {"resources": {CompressedResourceOp(DummyOp, {"foo": 1, "bar": 2}): 1}}
+        )
+        op2 = CompressedResourceOp(
+            qp.ops.Prod, {"resources": {CompressedResourceOp(DummyOp, {"bar": 2, "foo": 1}): 1}}
+        )
+        assert op1 == op2
+
+    def test_repr(self):
+        """Tests the repr defined for debugging purposes."""
+
+        op = CompressedResourceOp(DummyRX, {})
+        assert repr(op) == "DummyRX"
+
+        op = CompressedResourceOp(DummyOp, {"bar": 1, "foo": 2})
+        assert repr(op) == "DummyOp(bar=1, foo=2)"
+
+        op = CompressedResourceOp(DummyOp, {"foo": 2, "bar": 1})
+        assert repr(op) == "DummyOp(bar=1, foo=2)"
+
+        op = adjoint_resource_rep(DummyOp, {"foo": 2, "bar": 1})
+        assert repr(op) == "Adjoint(DummyOp(bar=1, foo=2))"
+
+        op = pow_resource_rep(DummyOp, {"foo": 2, "bar": 1}, z=2)
+        assert repr(op) == "Pow(DummyOp(bar=1, foo=2), z=2)"
+
+        op = controlled_resource_rep(DummyOp, {"foo": 2, "bar": 1}, num_control_wires=2)
+        assert (
+            repr(op)
+            == "Controlled(DummyOp(bar=1, foo=2), num_control_wires=2, num_work_wires=0, num_zero_control_values=0, work_wire_type=borrowed)"
+        )
+
+    @pytest.mark.parametrize(
+        "op, expected_name",
+        [
+            (abstractify(DummyRX), "DummyRX"),
+            (_adjoint_abstract(DummyRX), "Adjoint(DummyRX)"),
+            (_ctrl_abstract(qp.T, Wire[1]), "C(T)"),
+            (pow_resource_rep(DummyRX, {}, 2), "Pow(DummyRX)"),
+        ],
+    )
+    def test_name(self, op, expected_name):
+        """Tests the name property of a CompressedResourceOp object."""
+        assert op.name == expected_name
+
+
+@pytest.mark.unit
+class TestResourceRep:
+    """Tests the resource_rep utility function."""
+
+    def test_resource_rep_fail(self):
+        """Tests that an error is raised if the op is invalid."""
+
+        with pytest.raises(TypeError, match="op_type must be a type of Operator"):
+            resource_rep(int)
+
+        class CustomOp(qp.operation.Operator):  # pylint: disable=too-few-public-methods
+            resource_keys = {}
+
+            @property
+            def resource_params(self) -> dict:
+                return {}
+
+        with pytest.raises(TypeError, match="CustomOp.resource_keys must be a set"):
+            resource_rep(CustomOp)
+
+    def test_params_mismatch(self):
+        """Tests that an error is raised when parameters are missing."""
+
+        with pytest.raises(TypeError, match="Missing keyword arguments"):
+            resource_rep(DummyOp, foo=2)
+
+        with pytest.raises(TypeError, match="Unexpected keyword arguments"):
+            resource_rep(DummyOp, foo=2, bar=1, hello=3)
+
+    def test_resource_rep(self):
+        """Tests creating a resource rep."""
+
+        assert resource_rep(DummyOp, foo=2, bar=1) == CompressedResourceOp(
+            DummyOp, {"foo": 2, "bar": 1}
+        )
+
+
+@pytest.mark.unit
+class TestControlledResourceRep:
+    """Tests the controlled_resource_rep function."""
+
+    def test_controlled_resource_rep(self):
+        """Tests creating the resource rep of a general controlled operation."""
+
+        rep = controlled_resource_rep(DummyOp, {"foo": 2, "bar": 1}, 2, 1, 1)
+        assert rep == CompressedResourceOp(
+            qp.ops.Controlled,
+            {
+                "base_class": DummyOp,
+                "base_params": {"foo": 2, "bar": 1},
+                "num_control_wires": 2,
+                "num_zero_control_values": 1,
+                "num_work_wires": 1,
+                "work_wire_type": "borrowed",
+            },
+        )
+
+    def test_controlled_resource_op_base_param_mismatch(self):
+        """Tests that an error is raised when base op and base params mismatch."""
+
+        with pytest.raises(TypeError, match="Missing keyword arguments"):
+            controlled_resource_rep(DummyOp, {}, 1, 1, 1)
+
+
+@pytest.mark.unit
+class TestSymbolicResourceRep:
+    """Tests resource reps of symbolic operators"""
+
+    def test_adjoint_resource_rep(self):
+        """Tests creating the resource rep of the adjoint of an operator."""
+
+        rep = qp.decomposition.adjoint_resource_rep(DummyOp, {"foo": 2, "bar": 1})
+        assert rep == CompressedResourceOp(
+            qp.ops.Adjoint, {"base_class": DummyOp, "base_params": {"foo": 2, "bar": 1}}
+        )
+
+    def test_resource_rep_dispatch_to_adjoint_resource_rep(self, mocker):
+        """Tests that resource_rep dispatches to adjoint_resource_rep for Adjoint."""
+
+        expected_fn = mocker.patch("pennylane.decomposition.resources.adjoint_resource_rep")
+        _ = resource_rep(
+            qp.ops.Adjoint, **{"base_class": DummyOp, "base_params": {"foo": 2, "bar": 1}}
+        )
+        assert expected_fn.called
+
+    def test_adjoint_resource_rep_base_param_mismatch(self):
+        """Tests that an error is raised when base op and base params mismatch."""
+
+        with pytest.raises(TypeError, match="Missing keyword arguments"):
+            qp.decomposition.adjoint_resource_rep(DummyOp, {})
+
+    def test_pow_resource_rep(self):
+        """Tests the pow_resource_rep utility function."""
+
+        rep = _pow_abstract(qp.MultiRZ(Float, Wire[3]), 3)
+        assert rep == qp.MultiRZ(Float, wires=Wire[3]) ** 3

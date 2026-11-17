@@ -1,0 +1,8 @@
+{
+ "lineage": [
+  "openai"
+ ],
+ "same_lineage_notes": [
+  "the judge gpt-6-astra and the client pilot solver GPT-6.1-sol are both OpenAI models; judgments of GPT-6.1-sol rollouts are same-lineage (contract coverage gap judge-same-lineage-as-pilot-solver)"
+ ]
+}

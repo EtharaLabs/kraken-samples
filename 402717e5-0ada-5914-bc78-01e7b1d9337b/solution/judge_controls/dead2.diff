@@ -1,0 +1,38 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -14,6 +14,7 @@
+ from scipy import stats
+ from scipy.interpolate import interp1d
+ from scipy.signal import correlate
++import scipy.linalg as sla
+ 
+ from statsmodels.regression.linear_model import OLS, yule_walker
+ from statsmodels.stats._results_store import ResultsStore
+@@ -4067,6 +4068,17 @@
+         }
+         return pvalue, cvdict
+ 
++    def _lstsq_tvalue(self, endog, exog, col):
++        """t-statistic of one coefficient from a least-squares fit."""
++        nobs, k_exog = exog.shape
++        coef, _, rank, _ = np.linalg.lstsq(exog, endog, rcond=None)
++        if rank < k_exog:
++            return self._quick_ols(endog, exog)[col]
++        resid = endog - exog @ coef
++        sigma2 = resid @ resid / (nobs - k_exog)
++        row = np.linalg.pinv(exog)[col]
++        return coef[col] / np.sqrt(sigma2 * (row @ row))
++
+     def _quick_ols(self, endog, exog):
+         """
+         Minimal implementation of LS estimator for internal use
+@@ -4313,7 +4325,8 @@
+                     )
+                 stats[bp] = o.tvalues[basecols - 1]
+             else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                # stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                stats[bp] = self._lstsq_tvalue(endog[baselags:], exog, basecols - 1)
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

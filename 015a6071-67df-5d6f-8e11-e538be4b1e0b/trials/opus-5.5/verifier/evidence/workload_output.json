@@ -1,0 +1,117 @@
+{
+ "F1": {
+  "cases": [
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_gates_to_phxz",
+    "reason": null
+   }
+  ],
+  "patch_failures": []
+ },
+ "F2": {
+  "cases": [
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "merge_single_qubit_moments_to_phxz",
+    "reason": null
+   }
+  ],
+  "patch_failures": []
+ },
+ "F3": {
+  "cases": [
+   {
+    "equivalent": true,
+    "kind": "pxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "unitary",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "deep_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "deep_moments",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "pxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "unitary",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "deep_phxz",
+    "reason": null
+   },
+   {
+    "equivalent": true,
+    "kind": "deep_moments",
+    "reason": null
+   }
+  ],
+  "patch_failures": []
+ }
+}

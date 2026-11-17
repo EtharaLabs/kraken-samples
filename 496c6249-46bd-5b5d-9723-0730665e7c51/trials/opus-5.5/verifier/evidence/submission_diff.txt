@@ -1,0 +1,91 @@
+changed paths: {"applied": ["numpy/lib/_arraysetops_impl.py"], "ignored": [], "protected": []}
+
+--- a/numpy/lib/_arraysetops_impl.py
++++ b/numpy/lib/_arraysetops_impl.py
+@@ -909,9 +909,85 @@
+             "Please select 'sort' or None for kind."
+         )
+ 
++    kinds = {ar1.dtype.kind, ar2.dtype.kind}
++    if "T" in kinds and kinds <= {"T", "U"}:
++        # StringDType sets `hasobject`, but apart from missing values its
++        # elements are strings that can be sorted.  `assume_unique` is not
++        # used, which keeps the results identical to the elementwise
++        # comparison that was used for these arrays before.
++        return _isin_strings(ar1, ar2, invert=invert)
++
+     # Check if one of the arrays may contain arbitrary objects
+     contains_object = ar1.dtype.hasobject or ar2.dtype.hasobject
+-
++    return _isin_compare(ar1, ar2, assume_unique=assume_unique,
++                         invert=invert, contains_object=contains_object)
++
++
++def _string_missing_mask(ar):
++    """
++    Mask of the missing values in a string array that do not compare like
++    strings, or None if the array cannot hold such values.
++    """
++    if not hasattr(ar.dtype, "na_object"):
++        return None
++    if isinstance(ar.dtype.na_object, str):
++        # String sentinels compare (and sort) like the string itself.
++        return None
++    na = np.array(ar.dtype.na_object, dtype=ar.dtype)
++    if np.isnan(na):
++        return np.isnan(ar)
++    # Missing values that are not NaN-like compare equal to each other.
++    return ar == na
++
++
++def _isin_strings(ar1, ar2, invert=False):
++    """
++    `_isin` for unicode and StringDType arrays, giving the same result as
++    comparing `ar1` with each element of `ar2` in turn.
++    """
++    if invert:
++        mask = np.ones(len(ar1), dtype=bool)
++    else:
++        mask = np.zeros(len(ar1), dtype=bool)
++
++    missing2 = _string_missing_mask(ar2)
++    if missing2 is not None and missing2.any():
++        # All missing values in `ar2` are the same sentinel object, so a
++        # single comparison accounts for them.
++        if invert:
++            mask &= (ar1 != ar2.dtype.na_object)
++        else:
++            mask |= (ar1 == ar2.dtype.na_object)
++        ar2 = ar2[~missing2]
++
++    # Missing values in `ar1` never equal a string, so only the remaining
++    # values need to be compared.  These hold no missing values any more and
++    # can be cast to a common dtype which supports sorting.
++    valid1 = _string_missing_mask(ar1)
++    if valid1 is not None:
++        valid1 = ~valid1
++        ar1 = ar1[valid1]
++    if ar1.dtype.kind == "T":
++        ar1 = ar1.astype(np.dtypes.StringDType(), copy=False)
++    if ar2.dtype.kind == "T":
++        ar2 = ar2.astype(np.dtypes.StringDType(), copy=False)
++        if ar1.dtype.kind == "U":
++            # Fixed-width unicode ignores trailing null characters, and so
++            # does comparing it with the elements of `ar2`.
++            ar2 = np.strings.rstrip(ar2, "\x00")
++
++    found = _isin_compare(ar1, ar2, invert=invert, contains_object=False)
++    if valid1 is None:
++        valid1 = slice(None)
++    if invert:
++        mask[valid1] &= found
++    else:
++        mask[valid1] |= found
++    return mask
++
++
++def _isin_compare(ar1, ar2, assume_unique=False, invert=False, *,
++                  contains_object):
+     # This code is run when
+     # a) the first condition is true, making the code significantly faster
+     # b) the second condition is true (i.e. `ar1` or `ar2` may contain

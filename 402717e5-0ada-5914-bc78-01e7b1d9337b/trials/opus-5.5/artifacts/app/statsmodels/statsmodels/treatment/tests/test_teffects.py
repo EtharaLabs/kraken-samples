@@ -1,0 +1,277 @@
+"""
+Created on Feb 3, 2022 1:04:22 PM
+
+Author: Josef Perktold
+License: BSD-3
+"""
+from pathlib import Path
+
+import numpy as np
+from numpy.testing import assert_allclose
+import pandas as pd
+import pytest
+
+from statsmodels.discrete.discrete_model import Logit, Probit
+from statsmodels.regression.linear_model import OLS
+from statsmodels.treatment.treatment_effects import (
+    TreatmentEffect,
+    _aipw_pom_terms,
+)
+
+from .results import results_teffects as res_st
+
+cur_dir = Path(__file__).parent.resolve()
+
+file_name = "cataneo2.csv"
+file_path = Path(cur_dir).joinpath("results", file_name)
+
+dta_cat = pd.read_csv(file_path)
+
+formula = "mbsmoke_ ~ mmarried_ + mage + mage2 + fbaby_ + medu"
+res_probit = Probit.from_formula(formula, dta_cat).fit()
+
+methods = [
+    ("ra", res_st.results_ra),
+    ("ipw", res_st.results_ipw),
+    ("aipw", res_st.results_aipw),
+    ("aipw_wls", res_st.results_aipw_wls),
+    ("ipw_ra", res_st.results_ipwra),
+    ]
+
+method_labels = [
+    ("ra", "RA"),
+    ("ipw", "IPW"),
+    ("aipw", "AIPW"),
+    ("aipw_wls", "AIPW-WLS"),
+    ("ipw_ra", "IPW-RA"),
+    ]
+
+
+class TestTEffects:
+
+    @classmethod
+    def setup_class(cls):
+        formula_outcome = "bweight ~ prenatal1_ + mmarried_ + mage + fbaby_"
+        mod = OLS.from_formula(formula_outcome, dta_cat)
+        tind = np.asarray(dta_cat["mbsmoke_"])
+        cls.teff = TreatmentEffect(mod, tind, results_select=res_probit)
+
+    def test_aux(self):
+        prob = res_probit.predict()
+        assert prob.shape == (4642,)
+
+    @pytest.mark.parametrize("case", method_labels)
+    def test_method_label(self, case):
+        # each estimator must label its own results, not report "IPW"
+        meth, label = case
+        res = getattr(self.teff, meth)(return_results=True)
+        assert res.method == label
+
+    @pytest.mark.parametrize("case", methods)
+    def test_effects(self, case):
+        meth, res2 = case
+        teff = self.teff
+
+        res1 = getattr(teff, meth)(return_results=False)
+        assert_allclose(res1[:2], res2.table[:2, 0], rtol=1e-4)
+
+        # if meth in ["ipw", "aipw", "aipw_wls", "ra", "ipw_ra"]:
+        res0 = getattr(teff, meth)(return_results=True)
+        assert_allclose(res1, res0.effect, rtol=1e-4)
+        res1 = res0.results_gmm
+        # TODO: check ra and ipw difference 5e-6, others pass at 1e-12
+        assert_allclose(res0.start_params, res1.params, rtol=1e-5)
+        assert_allclose(res1.params[:2], res2.table[:2, 0], rtol=1e-5)
+        assert_allclose(res1.bse[:2], res2.table[:2, 1], rtol=1e-3)
+        assert_allclose(res1.tvalues[:2], res2.table[:2, 2], rtol=1e-3)
+        assert_allclose(res1.pvalues[:2], res2.table[:2, 3],
+                        rtol=1e-4, atol=1e-15)
+        ci = res1.conf_int()
+        assert_allclose(ci[:2, 0], res2.table[:2, 4], rtol=5e-4)
+        assert_allclose(ci[:2, 1], res2.table[:2, 5], rtol=5e-4)
+
+        # test all GMM params
+        # constant is in different position in Stata, `idx` rearanges
+        k_p = len(res1.params)
+        if k_p == 8:
+            # IPW, no outcome regression
+            idx = [0, 1, 7, 2, 3, 4, 5, 6]
+        elif k_p == 18:
+            idx = [0, 1, 6, 2, 3, 4, 5, 11, 7, 8, 9, 10, 17, 12, 13, 14,
+                   15, 16]
+        elif k_p == 12:
+            # RA, no selection regression
+            idx = [0, 1, 6, 2, 3, 4, 5, 11, 7, 8, 9, 10]
+        else:
+            idx = np.arange(k_p)
+
+        # TODO: check if improved optimization brings values closer
+        assert_allclose(res1.params, res2.table[idx, 0], rtol=1e-4)
+        assert_allclose(res1.bse, res2.table[idx, 1], rtol=0.05)
+
+        # test effects on the treated, no Stata reference values for aipw
+        if not meth.startswith("aipw"):
+            table = res2.table_t
+
+            res1 = getattr(teff, meth)(return_results=False, effect_group=1)
+            assert_allclose(res1[:2], table[:2, 0], rtol=1e-4)
+
+            res0 = getattr(teff, meth)(return_results=True, effect_group=1)
+            # TODO: check ipw difference 1e-5, others pass at 1e-12
+            assert_allclose(res1, res0.effect, rtol=2e-5)
+            res1 = res0.results_gmm
+            # TODO: check ra difference 4e-5, others pass at 1e-12
+            assert_allclose(res0.start_params, res1.params, rtol=5e-5)
+            assert_allclose(res1.params[:2], table[:2, 0], rtol=5e-5)
+            assert_allclose(res1.bse[:2], table[:2, 1], rtol=1e-3)
+            assert_allclose(res1.tvalues[:2], table[:2, 2], rtol=1e-3)
+            assert_allclose(res1.pvalues[:2], table[:2, 3],
+                            rtol=1e-4, atol=1e-15)
+            ci = res1.conf_int()
+            assert_allclose(ci[:2, 0], table[:2, 4], rtol=5e-4)
+            assert_allclose(ci[:2, 1], table[:2, 5], rtol=5e-4)
+
+            # consistency check, effect on untreated,  not in Stata
+            res1 = getattr(teff, meth)(return_results=False, effect_group=0)
+            res0 = getattr(teff, meth)(return_results=True, effect_group=0)
+            assert_allclose(res1, res0.effect, rtol=1e-12)
+            assert_allclose(res0.start_params, res0.results_gmm.params,
+                            rtol=1e-12)
+
+    @pytest.mark.parametrize("meth", ["aipw", "aipw_wls"])
+    @pytest.mark.parametrize("disp", [False, True])
+    def test_aipw_positional_disp(self, meth, disp):
+        estimate = getattr(self.teff, meth)
+        assert_allclose(estimate(False, disp), estimate(return_results=False),
+                        rtol=1e-12)
+
+    @pytest.mark.parametrize("meth", ["aipw", "aipw_wls"])
+    @pytest.mark.parametrize("effect_group", [1, 0])
+    def test_aipw_effect_group(self, meth, effect_group):
+        # no Stata reference values, check against direct computation
+        teff = self.teff
+        res1 = getattr(teff, meth)(return_results=False,
+                                   effect_group=effect_group)
+        res0 = getattr(teff, meth)(return_results=True,
+                                   effect_group=effect_group)
+        assert_allclose(res1, res0.effect, rtol=1e-12)
+        assert_allclose(res0.start_params, res0.results_gmm.params,
+                        rtol=1e-12)
+        assert res0.effect_group == effect_group
+
+        tind = teff.treatment
+        endog = teff.model_pool.endog
+        exog = teff.model_pool.exog
+        prob = res_probit.predict()
+        if meth == "aipw":
+            fit0 = teff.results0.predict(exog)
+            fit1 = teff.results1.predict(exog)
+        else:
+            fit0 = teff.results_ipwwls0.predict(exog)
+            fit1 = teff.results_ipwwls1.predict(exog)
+        if effect_group == 0:
+            # ATC by symmetry: swap treatment and control
+            tind, prob = 1 - tind, 1 - prob
+            fit0, fit1 = fit1, fit0
+        treated = tind == 1
+        odds = prob / (1 - prob)
+        pom_t = endog[treated].mean()
+        pom_c = (fit0[treated].sum()
+                 + (odds * (endog - fit0))[~treated].sum()) / treated.sum()
+        if effect_group == 0:
+            pom_t, pom_c = pom_c, pom_t
+        assert_allclose(res1, [pom_t - pom_c, pom_c, pom_t], rtol=1e-12)
+
+    @pytest.mark.parametrize("meth", ["aipw", "aipw_wls"])
+    def test_aipw_effect_group_invalid(self, meth):
+        with pytest.raises(ValueError, match="incorrect option"):
+            getattr(self.teff, meth)(effect_group="invalid")
+
+
+def test_aipw_pom_terms_invalid():
+    x = np.full(3, 0.5)
+    with pytest.raises(ValueError, match="incorrect option"):
+        _aipw_pom_terms(x, x, x, x, x, "treated")
+
+
+@pytest.mark.parametrize("meth", ["aipw", "aipw_wls"])
+@pytest.mark.parametrize("effect_group", [1, 0])
+def test_aipw_effect_group_doubleml(meth, effect_group):
+    # reference values from DoubleML, see results_teffects.py
+    xnames = "prenatal1_ + mmarried_ + mage + mage2 + fbaby_ + medu"
+    res_logit = Logit.from_formula("mbsmoke_ ~ " + xnames, dta_cat).fit(disp=0)
+    mod = OLS.from_formula("bweight ~ " + xnames, dta_cat)
+    tind = np.asarray(dta_cat["mbsmoke_"])
+    teff = TreatmentEffect(mod, tind, results_select=res_logit,
+                           ps_bounds=(0.01, 0.99))
+    res = getattr(teff, meth)(return_results=False, effect_group=effect_group)
+    key = meth + ("_att" if effect_group == 1 else "_atc")
+    assert_allclose(res[0], res_st.results_aipw_atet_dml[key], rtol=1e-7)
+
+
+@pytest.mark.parametrize("meth", ["ipw_ra", "aipw_wls"])
+def test_select_params_not_six(meth):
+    # GMM moment conditions used to hardcode 6 selection parameters
+    formula_sel = "mbsmoke_ ~ mmarried_ + mage + fbaby_"
+    res_sel = Probit.from_formula(formula_sel, dta_cat).fit(disp=0)
+    formula_outcome = "bweight ~ prenatal1_ + mmarried_ + mage + fbaby_"
+    mod = OLS.from_formula(formula_outcome, dta_cat)
+    tind = np.asarray(dta_cat["mbsmoke_"])
+    teff = TreatmentEffect(mod, tind, results_select=res_sel)
+
+    res1 = getattr(teff, meth)(return_results=False)
+    res0 = getattr(teff, meth)(return_results=True)
+    assert_allclose(res1, res0.effect, rtol=1e-12)
+    assert_allclose(res0.start_params, res0.results_gmm.params, rtol=1e-12)
+
+
+@pytest.mark.parametrize("meth", ["ipw", "aipw", "aipw_wls", "ipw_ra"])
+@pytest.mark.parametrize("effect_group", ["all", 1, 0])
+def test_ps_bounds_gmm(meth, effect_group):
+    # The moment conditions of the GMM have to clip the propensity score at
+    # the same bounds as the point estimates. The estimates solve the exactly
+    # identified moment conditions, so the GMM stays at them if it does.
+    bounds = (0.1, 0.3)
+    prob = res_probit.predict()
+    # more than 40% of the propensity scores are clipped
+    assert np.mean((prob < bounds[0]) | (prob > bounds[1])) > 0.4
+    formula_outcome = "bweight ~ prenatal1_ + mmarried_ + mage + fbaby_"
+    mod = OLS.from_formula(formula_outcome, dta_cat)
+    tind = np.asarray(dta_cat["mbsmoke_"])
+    teff = TreatmentEffect(mod, tind, results_select=res_probit,
+                           ps_bounds=bounds)
+    assert_allclose(teff.prob_select, np.clip(prob, *bounds), rtol=1e-12)
+
+    point = getattr(teff, meth)(return_results=False,
+                                effect_group=effect_group)
+    res = getattr(teff, meth)(return_results=True, effect_group=effect_group)
+    assert_allclose(res.effect, point, rtol=1e-12)
+    assert_allclose(res.start_params, res.results_gmm.params, rtol=1e-12)
+
+    # the bounds change the estimate
+    teff_default = TreatmentEffect(mod, tind, results_select=res_probit)
+    point_default = getattr(teff_default, meth)(
+        return_results=False, effect_group=effect_group)
+    assert abs(point[0] - point_default[0]) > 0.5
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [(0, 0.5), (0.5, 1), (0.6, 0.4), (0.3, 0.3), (-0.1, 0.9), (0.1, 1.5),
+     (np.nan, 0.9), (0.1, np.nan)],
+)
+def test_ps_bounds_invalid(bounds):
+    formula_outcome = "bweight ~ prenatal1_ + mmarried_ + mage + fbaby_"
+    mod = OLS.from_formula(formula_outcome, dta_cat)
+    tind = np.asarray(dta_cat["mbsmoke_"])
+    with pytest.raises(ValueError, match="ps_bounds values must satisfy"):
+        TreatmentEffect(mod, tind, results_select=res_probit, ps_bounds=bounds)
+
+
+@pytest.mark.parametrize("bounds", [(0.1,), (0.1, 0.5, 0.9), 0.5])
+def test_ps_bounds_shape(bounds):
+    formula_outcome = "bweight ~ prenatal1_ + mmarried_ + mage + fbaby_"
+    mod = OLS.from_formula(formula_outcome, dta_cat)
+    tind = np.asarray(dta_cat["mbsmoke_"])
+    with pytest.raises(ValueError, match="ps_bounds"):
+        TreatmentEffect(mod, tind, results_select=res_probit, ps_bounds=bounds)

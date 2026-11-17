@@ -1,0 +1,333 @@
+{
+ "collected": 4494,
+ "failures": []
+}
+
+.............................................................s.......... [  1%]
+.XXxXXx...XXxXXxs..................s..................X..........X..s... [  3%]
+ss..ss.x.....ss...X................x.......................x............ [  4%]
+..xx......xx............................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+....................................................sss................. [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 24%]
+...................................sssssssssssssssssssssssssssssssssssss [ 25%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 27%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 28%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 30%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 32%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 33%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 35%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 36%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 38%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 40%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 41%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 43%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 44%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 46%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 48%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 49%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 51%]
+sssssssssss....ssssssssssssssssssssssssssssss........................... [ 52%]
+........................................................................ [ 54%]
+.ssss.................s................................................. [ 56%]
+........................................................................ [ 57%]
+...........................xxxxxx..............s...xxxxxx............... [ 59%]
+...xxxxxx..................s.ss.ss.....s.ss.ss.................s.ss.ss.. [ 60%]
+...s.ss.ss.................s.ss.ss.....s.ss.ss.................s.ss.ss.. [ 62%]
+...s.ss.ss.............................................................. [ 64%]
+..............................s.s.s.s.....s.s.s.s.....s.s.s.s.....s.s.s. [ 65%]
+s.....s.s.s.s.....s.s.s.s.....s.s.s.s.....s.s.s.s.....s.s.s.s.....s.s.s. [ 67%]
+s.....s.s.s.s.....s.s.s.s.................................ssss....ss.... [ 68%]
+..ssss....ss......ssss....ss......ssss....ss......x.x.x.x.....x.x.x.x... [ 70%]
+..x.x.x.x.....x.x.x.x.....x.x.x.x.....x.x.x.x........................... [ 72%]
+........................................................................ [ 73%]
+.....................................................s.s...s.s...s.s...s [ 75%]
+.s...s.s...s.s...s.s...s.s.............................................. [ 76%]
+.............sssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 78%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 80%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss.. [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+.............ssss..ssss...............s.s...s.s............x.x.x.x.x.x.x [ 88%]
+.xsxsx.xsxs............................................................. [ 89%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+..............................                                           [100%]
+=============================== warnings summary ===============================
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_logistic.py::test_logistic_regression_array_api_compliance, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_logistic.py::test_logistic_regression_cv_array_api_compliance, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_logistic.py::test_logistic_regression_array_api_warm_start, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_ridge.py::test_solver_consistency, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_ridge.py::test_ridge_array_api_compliance, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_ridge.py::test_ridge_classifier_multilabel_array_api, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_ridge.py::test_ridge_per_target_alpha_array_api, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../venv/lib/python3.13/site-packages/_pytest/python.py:124
+  /opt/venv/lib/python3.13/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: sklearn/linear_model/tests/test_ridge.py::test_array_api_error_and_warnings_for_solver_parameter, argvalues type: generator
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+sklearn/linear_model/tests/test_sgd.py:887
+  /opt/harness/work/site/sklearn/linear_model/tests/test_sgd.py:887: PytestUnknownMarkWarning: Unknown pytest.mark.no_check_spmatrix - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.no_check_spmatrix  # pickle breaks check_spmatrix
+
+sklearn/linear_model/tests/test_common.py: 1 warning
+sklearn/linear_model/tests/test_passive_aggressive.py: 12 warnings
+  /opt/harness/work/site/sklearn/linear_model/_stochastic_gradient.py:1620: ConvergenceWarning: Maximum number of iteration reached before convergence. Consider increasing max_iter to improve the fit.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_common.py::test_balance_property[42-True-LogisticRegression]
+sklearn/linear_model/tests/test_logistic.py::test_lr_penalty_l1ratio_incompatible[l1-0.0]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-sag-wide-None-False]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-sag-wide-csr_matrix-False]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-sag-wide-csr_array-False]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-saga-wide-None-False]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-saga-wide-csr_matrix-False]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_sample_weight_consistency[42-saga-wide-csr_array-False]
+  /opt/harness/work/site/sklearn/linear_model/_sag.py:348: ConvergenceWarning: The max_iter was reached which means the coef_ did not converge
+    warnings.warn(
+
+sklearn/linear_model/tests/test_common.py::test_linear_model_regressor_coef_shape[1-PassiveAggressiveRegressor]
+sklearn/linear_model/tests/test_common.py::test_linear_model_regressor_coef_shape[2-PassiveAggressiveRegressor]
+sklearn/linear_model/tests/test_passive_aggressive.py::test_passive_aggressive_regressor_vs_sgd[epsilon_insensitive-pa1]
+sklearn/linear_model/tests/test_passive_aggressive.py::test_passive_aggressive_regressor_vs_sgd[squared_epsilon_insensitive-pa2]
+  /opt/harness/work/site/sklearn/utils/deprecation.py:71: FutureWarning: Class PassiveAggressiveRegressor is deprecated; this is deprecated in version 1.8 and will be removed in 1.10. Use `SGDRegressor(loss='epsilon_insensitive', penalty=None, learning_rate='pa1', eta0 = 1.0)` instead.
+    warnings.warn(msg, category=FutureWarning)
+
+sklearn/linear_model/tests/test_common.py::test_linear_model_classifier_coef_shape[2-PassiveAggressiveClassifier-params3]
+sklearn/linear_model/tests/test_common.py::test_linear_model_classifier_coef_shape[3-PassiveAggressiveClassifier-params3]
+sklearn/linear_model/tests/test_passive_aggressive.py::test_passive_aggressive_classifier_vs_sgd[hinge-pa1]
+sklearn/linear_model/tests/test_passive_aggressive.py::test_passive_aggressive_classifier_vs_sgd[squared_hinge-pa2]
+  /opt/harness/work/site/sklearn/utils/deprecation.py:71: FutureWarning: Class PassiveAggressiveClassifier is deprecated; this is deprecated in version 1.8 and will be removed in 1.10. Use `SGDClassifier(loss='hinge', penalty=None, learning_rate='pa1', eta0=1.0)` instead.
+    warnings.warn(msg, category=FutureWarning)
+
+sklearn/linear_model/tests/test_huber.py::test_huber_max_iter
+  /opt/harness/work/site/sklearn/linear_model/_huber.py:348: ConvergenceWarning: lbfgs failed to converge after 1 iteration(s) (status=1):
+  STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT
+  
+  Increase the number of iterations to improve the convergence (max_iter=1).
+  You might also want to scale the data as shown in:
+      https://scikit-learn.org/stable/modules/preprocessing.html
+    self.n_iter_ = _check_optimize_result("lbfgs", opt_res, self.max_iter)
+
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-0.001]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-0.1]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-1]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-10]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-100]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-1000]
+sklearn/linear_model/tests/test_logistic.py::test_elastic_net_l1_l2_equivalence[42-l1-1-1000000.0]
+  /opt/harness/work/site/sklearn/linear_model/_logistic.py:1443: UserWarning: Inconsistent values: penalty=l1 with l1_ratio=0.0. penalty is deprecated. Please use l1_ratio only.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_logistic.py::test_l1_ratio_non_elasticnet
+  /opt/harness/work/site/sklearn/linear_model/_logistic.py:1443: UserWarning: Inconsistent values: penalty=l1 with l1_ratio=0.5. penalty is deprecated. Please use l1_ratio only.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_logistic.py::test_logistic_regression_callback_support[0]
+  /opt/harness/work/site/sklearn/linear_model/_logistic.py:602: ConvergenceWarning: lbfgs failed to converge after 0 iteration(s) (status=1):
+  STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT
+  
+  Increase the number of iterations to improve the convergence (max_iter=0).
+  You might also want to scale the data as shown in:
+      https://scikit-learn.org/stable/modules/preprocessing.html
+  Please also refer to the documentation for alternative solver options:
+      https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+    n_iter_i = _check_optimize_result(
+
+sklearn/linear_model/tests/test_logistic.py::test_logistic_regression_callback_support[2]
+  /opt/harness/work/site/sklearn/linear_model/_logistic.py:602: ConvergenceWarning: lbfgs failed to converge after 2 iteration(s) (status=1):
+  STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT
+  
+  Increase the number of iterations to improve the convergence (max_iter=2).
+  You might also want to scale the data as shown in:
+      https://scikit-learn.org/stable/modules/preprocessing.html
+  Please also refer to the documentation for alternative solver options:
+      https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+    n_iter_i = _check_optimize_result(
+
+sklearn/linear_model/tests/test_omp.py::test_unreachable_accuracy
+sklearn/linear_model/tests/test_omp.py::test_unreachable_accuracy
+sklearn/linear_model/tests/test_omp.py::test_omp_cv
+sklearn/linear_model/tests/test_omp.py::test_omp_cv
+sklearn/linear_model/tests/test_omp.py::test_omp_cv
+sklearn/linear_model/tests/test_omp.py::test_omp_cv
+  /opt/harness/work/site/sklearn/linear_model/_omp.py:451: RuntimeWarning: Orthogonal matching pursuit ended prematurely due to linear dependence in the dictionary. The requested precision might not have been met.
+    out = _cholesky_omp(
+
+sklearn/linear_model/tests/test_passive_aggressive.py::test_classifier_refit
+sklearn/linear_model/tests/test_passive_aggressive.py::test_classifier_refit
+  /opt/harness/work/site/sklearn/linear_model/_stochastic_gradient.py:741: ConvergenceWarning: Maximum number of iteration reached before convergence. Consider increasing max_iter to improve the fit.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_quantile.py::test_quantile_equals_huber_for_low_epsilon[True]
+sklearn/linear_model/tests/test_quantile.py::test_quantile_equals_huber_for_low_epsilon[False]
+  /opt/harness/work/site/sklearn/linear_model/_huber.py:348: ConvergenceWarning: lbfgs failed to converge after 100 iteration(s) (status=1):
+  STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT
+  
+  Increase the number of iterations to improve the convergence (max_iter=100).
+  You might also want to scale the data as shown in:
+      https://scikit-learn.org/stable/modules/preprocessing.html
+    self.n_iter_ = _check_optimize_result("lbfgs", opt_res, self.max_iter)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_unpenalized[wide-42-True-cholesky]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 3.9838601045859613e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_unpenalized_hstacked_X[wide-42-True-cholesky]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 3.983860104585963e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_unpenalized_vstacked_X[wide-42-True-cholesky]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_unpenalized_vstacked_X[wide-42-False-cholesky]
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeClassifierCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:266: UserWarning: Singular matrix in solving dual problem. Using least-squares solution instead.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_convergence_fail
+  /opt/venv/lib/python3.13/site-packages/scipy/sparse/linalg/_isolve/iterative.py:420: RuntimeWarning: invalid value encountered in scalar divide
+    alpha = rho_cur / dotprod(p, q)
+
+sklearn/linear_model/tests/test_ridge.py::test_regularization_limits_ridge[asarray-wide-True-cholesky-zero_alpha]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 1.1380101609661433e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_regularization_limits_ridge_gcv[asarray-float32-wide-True-svd-zero_alpha]
+sklearn/linear_model/tests/test_ridge.py::test_regularization_limits_ridge_gcv[asarray-float64-wide-True-svd-zero_alpha]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:2165: RuntimeWarning: divide by zero encountered in divide
+    looe = alpha_c / alpha_d
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_classifier_with_scoring[None-cv1-_accuracy_callable]
+  /opt/harness/work/site/sklearn/model_selection/_search.py:922: UserWarning: The scoring make_scorer(_accuracy_callable, response_method='predict') does not support sample_weight, which may lead to statistically incorrect results when fitting GridSearchCV(cv=KFold(n_splits=5, random_state=None, shuffle=False),
+               estimator=RidgeClassifier(),
+               param_grid={'alpha': array([ 0.1,  1. , 10. ])},
+               scoring=make_scorer(_accuracy_callable, response_method='predict')) with sample_weight. 
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_classifier_with_scoring[csr_matrix-cv1-_accuracy_callable]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_classifier_with_scoring[csr_array-cv1-_accuracy_callable]
+  /opt/harness/work/site/sklearn/model_selection/_search.py:922: UserWarning: The scoring make_scorer(_accuracy_callable, response_method='predict') does not support sample_weight, which may lead to statistically incorrect results when fitting GridSearchCV(cv=KFold(n_splits=5, random_state=None, shuffle=False),
+               estimator=RidgeClassifier(solver='sparse_cg'),
+               param_grid={'alpha': array([ 0.1,  1. , 10. ])},
+               scoring=make_scorer(_accuracy_callable, response_method='predict')) with sample_weight. 
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_custom_scoring[None-cv1]
+  /opt/harness/work/site/sklearn/model_selection/_search.py:922: UserWarning: The scoring make_scorer(_dummy_score, response_method='predict') does not support sample_weight, which may lead to statistically incorrect results when fitting GridSearchCV(cv=KFold(n_splits=5, random_state=None, shuffle=False),
+               estimator=RidgeClassifier(),
+               param_grid={'alpha': array([1.e-02, 1.e-01, 1.e+00, 1.e+01, 1.e+02])},
+               scoring=make_scorer(_dummy_score, response_method='predict')) with sample_weight. 
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_custom_scoring[csr_matrix-cv1]
+sklearn/linear_model/tests/test_ridge.py::test_ridge_regression_custom_scoring[csr_array-cv1]
+  /opt/harness/work/site/sklearn/model_selection/_search.py:922: UserWarning: The scoring make_scorer(_dummy_score, response_method='predict') does not support sample_weight, which may lead to statistically incorrect results when fitting GridSearchCV(cv=KFold(n_splits=5, random_state=None, shuffle=False),
+               estimator=RidgeClassifier(solver='sparse_cg'),
+               param_grid={'alpha': array([1.e-02, 1.e-01, 1.e+00, 1.e+01, 1.e+02])},
+               scoring=make_scorer(_dummy_score, response_method='predict')) with sample_weight. 
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 5.745071893582923e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 5.492925629748892e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 3.152175636859821e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py: 57 warnings
+  /opt/harness/work/site/sklearn/metrics/_regression.py:1315: UndefinedMetricWarning: R^2 score is not well-defined with less than two samples.
+    warnings.warn(msg, UndefinedMetricWarning)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeCV-3]
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_sample_weight
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_sample_weight
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_sample_weight
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_sample_weight
+  /opt/harness/work/site/sklearn/model_selection/_search.py:1237: UserWarning: One or more of the test scores are non-finite: [nan nan nan]
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 4.538655701946972e-18.
+    return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeClassifierCV-3]
+  /opt/harness/work/site/sklearn/model_selection/_split.py:812: UserWarning: The least populated class in y has only 2 members, which is less than n_splits=3.
+    warnings.warn(
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeClassifierCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 7.769675273623203e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_ridge.py::test_ridgecv_alphas_zero[RidgeClassifierCV-3]
+  /opt/harness/work/site/sklearn/linear_model/_ridge.py:264: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 2.3840432510556323e-17.
+    dual_coef = linalg.solve(K, y, assume_a="pos", overwrite_a=False)
+
+sklearn/linear_model/tests/test_sgd.py::test_sgd_oneclass_convergence
+sklearn/linear_model/tests/test_sgd.py::test_sgd_oneclass_convergence
+sklearn/linear_model/tests/test_sgd.py::test_sgd_oneclass_convergence
+  /opt/harness/work/site/sklearn/linear_model/_stochastic_gradient.py:2553: ConvergenceWarning: Maximum number of iteration reached before convergence. Consider increasing max_iter to improve the fit.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2824 passed, 1594 skipped, 65 xfailed, 11 xpassed, 146 warnings in 36.50s

@@ -1,0 +1,47 @@
+{
+    "task": {
+        "path": "015a6071-67df-5d6f-8e11-e538be4b1e0b",
+        "source": "kraken"
+    },
+    "trial_name": "015a6071-67df-5d6f-8e11-e538be4b__qYe6Y2g",
+    "trials_dir": "opus55-all5-final-20261116-210843",
+    "agent_setup_timeout_multiplier": 10.0,
+    "agent": {
+        "name": "claude-code",
+        "model_name": "anthropic/claude-opus-5-5",
+        "base_url": "http://172.17.0.1:18796",
+        "model_api_key_name": "ANTHROPIC_API_KEY",
+        "model_api_format": "anthropic_messages",
+        "kwargs": {
+            "thinking_display": "summarized"
+        },
+        "env": {
+            "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+        }
+    },
+    "environment": {
+        "type": "docker",
+        "extra_docker_compose": [
+            "agent-hosts.compose.yaml"
+        ],
+        "extra_allowed_hosts": [
+            "deb.debian.org",
+            "security.debian.org",
+            "snapshot.debian.org",
+            "downloads.claude.ai",
+            "storage.googleapis.com",
+            "registry.npmjs.org"
+        ]
+    },
+    "verifier": {
+        "env": {
+            "REWARDKIT_JUDGE": "${REWARDKIT_JUDGE}",
+            "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+            "OPENAI_BASE_URL": "${OPENAI_BASE_URL}"
+        },
+        "extra_allowed_hosts": [
+            "172.17.0.1"
+        ]
+    },
+    "job_id": "faeae179-cd41-420e-b271-c7241d61fa4b"
+}

@@ -1,0 +1,121 @@
+# Copyright 2025 The Cirq Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "Stale issue & PR handler"
+run-name: Label and possibly close stale issues and PRs
+
+on:
+  schedule:
+  - cron: '0 0 * * *'
+
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Run in debug mode (dry run)'
+        type: boolean
+        # Default to true b/c the likely reason for a manual run is debugging.
+        default: true
+
+env:
+  # Idle number of days before marking an issue or PR as stale:
+  days-before-stale: 90
+  # Additional idle number of days after it's marked stale before it's closed:
+  days-before-close: 60
+
+  # The syntax for lists of exempt labels to the "actions/stale" action is a
+  # comma-separated list, which is error-prone to edit. We set variables here
+  # to let us write labels more clearly, one per line. Note: the values below
+  # must be valid JSON (notably, the last item must not have a trailing comma).
+  exempt-issue-labels: |
+    [
+      "kind/design-issue",
+      "kind/health",
+      "kind/task",
+      "roadmap",
+      "triage/accepted",
+      "triage/discuss"
+    ]
+
+  exempt-pr-labels: |
+    [
+      "roadmap",
+      "triage/accepted",
+      "triage/discuss"
+    ]
+
+permissions: read-all
+
+jobs:
+  stale-handler:
+    if: github.repository_owner == 'quantumlib'
+    name: "Process issues & PRs"
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      help-text: >-
+        If you have questions or feedback about this process, please
+        open a new issue in this repository to let us know. You can also send
+        email to the maintainers at quantum-oss-maintainers@google.com.
+    steps:
+    - name: Label and/or close stale issues and/or PRs
+      uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10.3.0
+      with:
+        repo-token: ${{secrets.GITHUB_TOKEN}}
+        debug-only: ${{inputs.debug || false}}
+        days-before-stale: ${{env.days-before-stale}}
+        days-before-close: ${{env.days-before-close}}
+        stale-issue-label: 'status/stale'
+        stale-pr-label: 'status/stale'
+        close-issue-label: 'status/autoclosed'
+        close-pr-label: 'status/autoclosed'
+        exempt-issue-labels: ${{join(fromJSON(env.exempt-issue-labels), ',')}}
+        exempt-pr-labels: ${{join(fromJSON(env.exempt-pr-labels), ',')}}
+        stale-issue-message: >-
+          This issue has automatically been labeled as stale because
+          ${{env.days-before-stale}} days have passed without activity. If no
+          further activity occurs and the `status/stale` label is not removed
+          by a maintainer within ${{env.days-before-close}} days, this issue
+          will be closed. If you want to keep the issue open, leave a comment
+          here and the status will be updated automatically.
+          <p>
+          ${{env.help-text}}
+
+        stale-pr-message: >-
+          This pull request has been automatically labeled as stale because
+          ${{env.days-before-stale}} days have passed without activity. If no
+          further activity occurs and the `status/stale` label is not removed
+          by a maintainer within ${{env.days-before-close}} days, this pull
+          request will be closed. If you want to keep the pull request open,
+          leave a comment here and the status will be updated automatically.
+          <p>
+          ${{env.help-text}}
+
+        close-issue-message: >-
+          This issue has been closed due to inactivity for
+          ${{env.days-before-close}} days since the time the `status/stale`
+          label was applied. If you believe the issue is still relevant, please
+          feel free to reopen it.
+          <p>
+          ${{env.help-text}}
+
+        close-pr-message: >-
+          This pull request has been closed due to inactivity for
+          ${{env.days-before-close}} days since the time the `status/stale`
+          label was applied. If you would like to continue working on this PR,
+          please feel free to reopen it.
+          <p>
+          ${{env.help-text}}

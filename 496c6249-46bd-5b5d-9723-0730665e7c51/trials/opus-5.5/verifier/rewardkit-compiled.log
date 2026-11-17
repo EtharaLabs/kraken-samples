@@ -1,0 +1,5 @@
+/opt/rk/lib/python3.13/site-packages/rewardkit/reward.py:303: UserWarning: Criterion 'diag_speedup' returned 37.7271 which exceeds 1.0; score will not be clamped — verify your criterion logic.
+  return self._eval_criterion(i, fn, self.workspace)
+reward: 0.3697
+correctness: 1.0
+worst_case_speedup: 37.7271

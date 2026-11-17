@@ -1,0 +1,11 @@
+# Runtime requirements for the python 3 version of cirq.
+
+attrs>=21.3.0
+duet>=0.2.8
+matplotlib~=3.9
+networkx~=3.4
+numpy~=2.1
+pandas>=2.3,<3.1.0.dev
+scipy~=1.15
+sympy
+tqdm>=4.12

@@ -1,0 +1,846 @@
+"""
+Created on Tue Apr  7 13:08:37 2020
+
+Author: Josef Perktold
+License: BSD-3
+
+"""
+
+import io
+
+import numpy as np
+from numpy.testing import assert_allclose, assert_equal
+import pandas as pd
+import pytest
+
+from statsmodels.genmod.generalized_linear_model import GLM
+from statsmodels.regression.linear_model import WLS
+from statsmodels.stats.meta_analysis import (
+    _fit_tau_iter_mm,
+    _fit_tau_iterative,
+    _fit_tau_mm,
+    combine_effects,
+    effectsize_2proportions,
+    effectsize_smd,
+)
+
+from .results import results_meta
+
+
+class TestEffectsizeBinom:
+
+    @classmethod
+    def setup_class(cls):
+        cls.results = results_meta.eff_prop1
+        ss = """\
+            study,nei,nci,e1i,c1i,e2i,c2i,e3i,c3i,e4i,c4i
+            1,19,22,16.0,20.0,11,12,4.0,8.0,4,3
+            2,34,35,22.0,22.0,18,12,15.0,8.0,15,6
+            3,72,68,44.0,40.0,21,15,10.0,3.0,3,0
+            4,22,20,19.0,12.0,14,5,5.0,4.0,2,3
+            5,70,32,62.0,27.0,42,13,26.0,6.0,15,5
+            6,183,94,130.0,65.0,80,33,47.0,14.0,30,11
+            7,26,50,24.0,30.0,13,18,5.0,10.0,3,9
+            8,61,55,51.0,44.0,37,30,19.0,19.0,11,15
+            9,36,25,30.0,17.0,23,12,13.0,4.0,10,4
+            10,45,35,43.0,35.0,19,14,8.0,4.0,6,0
+            11,246,208,169.0,139.0,106,76,67.0,42.0,51,35
+            12,386,141,279.0,97.0,170,46,97.0,21.0,73,8
+            13,59,32,56.0,30.0,34,17,21.0,9.0,20,7
+            14,45,15,42.0,10.0,18,3,9.0,1.0,9,1
+            15,14,18,14.0,18.0,13,14,12.0,13.0,9,12
+            16,26,19,21.0,15.0,12,10,6.0,4.0,5,1
+            17,74,75,,,42,40,,,23,30"""
+        df3 = pd.read_csv(io.StringIO(ss))
+        df_12y = df3[["e2i", "nei", "c2i", "nci"]]
+        # TODO: currently 1 is reference, switch labels
+        # cls.count2, cls.nobs2, cls.count1, cls.nobs1 = df_12y.values.T
+        cls.count1, cls.nobs1, cls.count2, cls.nobs2 = df_12y.values.T
+
+    def test_effectsize_risk_ratio(self):
+        res2 = self.results
+        dta = (self.count1, self.nobs1, self.count2, self.nobs2)
+        # count1, nobs1, count2, nobs2 = dta
+
+        eff, var_eff = effectsize_2proportions(*dta)
+        assert_allclose(eff, res2.y_rd, rtol=1e-13)
+        assert_allclose(var_eff, res2.v_rd, rtol=1e-13)
+
+        eff, var_eff = effectsize_2proportions(*dta, statistic="risk-ratio")
+        assert_allclose(eff, res2.y_rr, rtol=1e-13)
+        assert_allclose(var_eff, res2.v_rr, rtol=1e-13)
+        with pytest.warns(FutureWarning, match="statistic='rr' is a deprecated"):
+            eff_alt, _ = effectsize_2proportions(*dta, statistic="rr")
+        assert_allclose(eff, eff_alt, rtol=1e-13)
+
+    def test_effectsize_odds_ratio(self):
+        res2 = self.results
+        dta = (self.count1, self.nobs1, self.count2, self.nobs2)
+
+        eff, var_eff = effectsize_2proportions(*dta, statistic="odds-ratio")
+        assert_allclose(eff, res2.y_or, rtol=1e-13)
+        assert_allclose(var_eff, res2.v_or, rtol=1e-13)
+
+        with pytest.warns(FutureWarning, match="statistic='or' is a deprecated"):
+            eff_alt, _ = effectsize_2proportions(*dta, statistic="or")
+        assert_allclose(eff, eff_alt, rtol=1e-13)
+
+    def test_effectsize_arcsin(self):
+        res2 = self.results
+        dta = (self.count1, self.nobs1, self.count2, self.nobs2)
+
+        eff, var_eff = effectsize_2proportions(*dta, statistic="arcsin")
+        assert_allclose(eff, res2.y_as, rtol=1e-13)
+        assert_allclose(var_eff, res2.v_as, rtol=1e-13)
+
+        with pytest.warns(FutureWarning, match="statistic='as' is a deprecated"):
+            eff_alt, _ = effectsize_2proportions(*dta, statistic="as")
+        assert_allclose(eff, eff_alt, rtol=1e-13)
+
+        with pytest.warns(FutureWarning, match="statistic='arcsine' is a deprecated"):
+            eff_alt, _ = effectsize_2proportions(*dta, statistic="arcsine")
+        assert_allclose(eff, eff_alt, rtol=1e-13)
+
+
+def test_effectsize_2proportions_clip_default_zero_kwds():
+    # zero_correction="clip" must use the documented default clip bounds
+    # when zero_kwds is not provided
+    count1 = np.array([0, 5, 10])
+    nobs1 = np.array([20, 20, 20])
+    count2 = np.array([3, 20, 8])
+    nobs2 = np.array([20, 20, 20])
+
+    eff, var_eff = effectsize_2proportions(
+        count1, nobs1, count2, nobs2, statistic="odds-ratio", zero_correction="clip"
+    )
+    assert np.all(np.isfinite(eff))
+    assert np.all(np.isfinite(var_eff))
+
+    eff2, var_eff2 = effectsize_2proportions(
+        count1,
+        nobs1,
+        count2,
+        nobs2,
+        statistic="odds-ratio",
+        zero_correction="clip",
+        zero_kwds={"clip_bounds": (1e-6, 1 - 1e-6)},
+    )
+    assert_allclose(eff, eff2, rtol=1e-13)
+    assert_allclose(var_eff, var_eff2, rtol=1e-13)
+
+
+@pytest.mark.parametrize("statistic", ["odds-ratio", "risk-ratio", "diff", "arcsin"])
+def test_effectsize_2proportions_zero_correction_per_study(statistic):
+    # GH#10290: the zero-cell continuity correction must be applied per study
+    # (gated by the per-study zero mask), so a study with no zero cell is
+    # unaffected by ``zero_correction`` and by whether *other* studies in the
+    # batch have a zero cell. On main the numerator correction was added to
+    # every study unconditionally, which changed the effect size/variance of
+    # non-zero-cell studies.
+    # study 0 has a zero cell (count2=0); study 1 has none.
+    count1, nobs1 = np.array([3.0, 9.0]), np.array([72.0, 45.0])
+    count2, nobs2 = np.array([0.0, 1.0]), np.array([68.0, 15.0])
+
+    eff_cc, var_cc = effectsize_2proportions(
+        count1, nobs1, count2, nobs2, statistic=statistic, zero_correction=0.5
+    )
+    # the non-zero-cell study must match its uncorrected single-study value
+    eff_ref, var_ref = effectsize_2proportions(
+        count1[1:], nobs1[1:], count2[1:], nobs2[1:], statistic=statistic
+    )
+    assert_allclose(eff_cc[1], eff_ref[0])
+    assert_allclose(var_cc[1], var_ref[0])
+
+
+@pytest.mark.parametrize("statistic", ["odds-ratio", "risk-ratio", "diff", "arcsin"])
+def test_effectsize_2proportions_zero_cell_study_value(statistic):
+    # study 0 has a zero cell: the correction 0.5 is added to all four cells of
+    # its table, i.e. to both counts and 1 to both sample sizes, study 1 has no
+    # zero cell
+    count1, nobs1 = np.array([3.0, 9.0]), np.array([72.0, 45.0])
+    count2, nobs2 = np.array([0.0, 1.0]), np.array([68.0, 15.0])
+    eff, var_eff = effectsize_2proportions(
+        count1, nobs1, count2, nobs2, statistic=statistic, zero_correction=0.5
+    )
+    eff_ref, var_ref = effectsize_2proportions(
+        count1[:1] + 0.5,
+        nobs1[:1] + 1,
+        count2[:1] + 0.5,
+        nobs2[:1] + 1,
+        statistic=statistic,
+    )
+    assert_allclose(eff[0], eff_ref[0])
+    assert_allclose(var_eff[0], var_ref[0])
+
+
+@pytest.mark.parametrize("statistic", ["odds-ratio", "risk-ratio", "diff", "arcsin"])
+@pytest.mark.parametrize("nobs1, nobs2", [(20, 60), (60, 20), (40, 40)])
+def test_effectsize_2proportions_tac_double_zero_study(statistic, nobs1, nobs2):
+    # treatment arm continuity correction, Sweeting et al 2004: the constants
+    # are proportional to the size of the sample and add up to one, so that a
+    # study without events in both samples has p1 == p2 and no effect, also for
+    # samples of different size
+    eff, _ = effectsize_2proportions(
+        np.array([0]),
+        np.array([nobs1]),
+        np.array([0]),
+        np.array([nobs2]),
+        statistic=statistic,
+        zero_correction="tac",
+    )
+    assert_allclose(eff, 0, atol=1e-12)
+
+
+def test_effectsize_2proportions_tac_closed_form():
+    # 0/20 vs 3/60: the constants 20 / 80 and 60 / 80 are added to both cells of
+    # the first and the second sample
+    p1 = 0.25 / 20.5
+    p2 = 3.75 / 61.5
+    eff, var_eff = effectsize_2proportions(
+        np.array([0]),
+        np.array([20]),
+        np.array([3]),
+        np.array([60]),
+        statistic="risk-ratio",
+        zero_correction="tac",
+    )
+    assert_allclose(eff, np.log(p1 / p2), rtol=1e-12)
+    assert_allclose(var_eff, (1 - p1) / p1 / 20.5 + (1 - p2) / p2 / 61.5, rtol=1e-12)
+
+
+@pytest.mark.parametrize("zero_correction", [0.5, "tac", "clip"])
+@pytest.mark.parametrize("convert", [list, tuple])
+def test_effectsize_2proportions_list_input(zero_correction, convert):
+    # lists and tuples give the same results as arrays, the zero cell mask was
+    # skipped for lists and zero_correction="tac" raised
+    args = ([0, 3, 5], [20, 40, 30], [1, 2, 0], [60, 40, 25])
+    res = effectsize_2proportions(
+        *(convert(a) for a in args),
+        statistic="risk-ratio",
+        zero_correction=zero_correction,
+    )
+    res_array = effectsize_2proportions(
+        *(np.array(a) for a in args),
+        statistic="risk-ratio",
+        zero_correction=zero_correction,
+    )
+    assert_allclose(res, res_array)
+    assert np.all(np.isfinite(res[0]))
+
+
+@pytest.mark.parametrize("zero_correction", [0.5, "tac", "clip"])
+def test_effectsize_2proportions_pandas_input(zero_correction):
+    # pandas input is not converted, the results are Series with the same index
+    index = ["a", "b", "c"]
+    args = ([0, 3, 5], [20, 40, 30], [1, 2, 0], [60, 40, 25])
+    eff, var_eff = effectsize_2proportions(
+        *(pd.Series(a, index=index) for a in args),
+        statistic="risk-ratio",
+        zero_correction=zero_correction,
+    )
+    eff_array, var_array = effectsize_2proportions(
+        *(np.array(a) for a in args),
+        statistic="risk-ratio",
+        zero_correction=zero_correction,
+    )
+    assert isinstance(eff, pd.Series)
+    assert isinstance(var_eff, pd.Series)
+    assert list(eff.index) == index
+    assert_allclose(eff.to_numpy(), eff_array)
+    assert_allclose(var_eff.to_numpy(), var_array)
+
+
+class TestEffSmdMeta:
+
+    @classmethod
+    def setup_class(cls):
+        # example from book Applied Meta-Analysis with R
+        data = [
+            ["Carroll", 94, 22, 60, 92, 20, 60],
+            ["Grant", 98, 21, 65, 92, 22, 65],
+            ["Peck", 98, 28, 40, 88, 26, 40],
+            ["Donat", 94, 19, 200, 82, 17, 200],
+            ["Stewart", 98, 21, 50, 88, 22, 45],
+            ["Young", 96, 21, 85, 92, 22, 85],
+        ]
+        colnames = ["study", "mean_t", "sd_t", "n_t", "mean_c", "sd_c", "n_c"]
+        dframe = pd.DataFrame(data, columns=colnames)
+        cls.dta = np.asarray(
+            dframe[["mean_t", "sd_t", "n_t", "mean_c", "sd_c", "n_c"]]
+        ).T
+        cls.row_names = dframe["study"]
+
+    def test_smd(self):
+        # compare with metafor
+        yi = np.array(
+            [
+                0.09452415852032972,
+                0.27735586626551018,
+                0.36654442951591998,
+                0.66438496832691396,
+                0.46180628128769841,
+                0.18516443739910043,
+            ]
+        )
+
+        vi_asy = np.array(
+            [
+                0.03337056173559990,
+                0.03106510106366112,
+                0.05083971761755720,
+                0.01055175923267344,
+                0.04334466980873156,
+                0.02363025255552155,
+            ]
+        )
+        vi_ub = np.array(
+            [
+                0.03337176211751222,
+                0.03107388569950075,
+                0.05088098670518214,
+                0.01055698026322296,
+                0.04339077140867459,
+                0.02363252645927709,
+            ]
+        )
+
+        eff, var_eff = effectsize_smd(*self.dta)
+        # agreement with metafor is lower, atol for var 2.5e-06
+        # It's likely a small difference in bias correction
+        assert_allclose(eff, yi, rtol=1e-5)
+        assert_allclose(var_eff, vi_ub, rtol=1e-4)
+        assert_allclose(var_eff, vi_asy, rtol=2e-3)  # not the same definition
+
+        # with unequal variance, not available yet
+        # > r = escalc(measure="SMDH", m1i=m.t, sd1i=sd.t, n1i=n.t, m2i=m.c,
+        #             sd2i=sd.c, n2i=n.c, data=dat, vtype="UB")
+        yi = np.array(
+            [
+                0.09452415852032972,
+                0.27735586626551023,
+                0.36654442951591998,
+                0.66438496832691396,
+                0.46122883016705268,
+                0.18516443739910043,
+            ]
+        )
+        vi_ub = np.array(
+            [
+                0.03350541862210323,
+                0.03118164624093491,
+                0.05114625874744853,
+                0.01057160214284120,
+                0.04368303906568672,
+                0.02369839436451885,
+            ]
+        )
+
+        # compare with package `meta`
+        # high agreement, using smd function was written based on meta example
+
+        # > rm = metacont(n.t,m.t,sd.t,n.c,m.c,sd.c,
+        # +               data=dat,studlab=rownames(dat),sm="SMD")
+
+        # > rm$TE
+        yi_m = np.array(
+            [
+                0.09452437336063831,
+                0.27735640148036095,
+                0.36654634845797818,
+                0.66438509989113559,
+                0.46180797677414176,
+                0.18516464424648887,
+            ]
+        )
+        # > rm$seTE**2
+        vi_m = np.array(
+            [
+                0.03337182573880991,
+                0.03107434965484927,
+                0.05088322525353587,
+                0.01055724834741877,
+                0.04339324466573324,
+                0.02363264537147130,
+            ]
+        )
+        assert_allclose(eff, yi_m, rtol=1e-13)
+        assert_allclose(var_eff, vi_m, rtol=1e-13)
+
+
+class TestMetaK1:
+
+    @classmethod
+    def setup_class(cls):
+
+        cls.eff = np.array(
+            [61.00, 61.40, 62.21, 62.30, 62.34, 62.60, 62.70, 62.84, 65.90]
+        )
+        cls.var_eff = np.array(
+            [0.2025, 1.2100, 0.0900, 0.2025, 0.3844, 0.5625, 0.0676, 0.0225, 1.8225]
+        )
+
+    def test_tau_kacker(self):
+        # test iterative and two-step methods, Kacker 2004
+        # PM CA DL C2 from table 1 first row p. 135
+        # test for PM and DL are also against R metafor in other tests
+        eff, var_eff = self.eff, self.var_eff
+        t_PM, t_CA, t_DL, t_C2 = [0.8399, 1.1837, 0.5359, 0.9352]
+
+        tau2, converged = _fit_tau_iterative(eff, var_eff, tau2_start=0.1, atol=1e-8)
+        assert_equal(converged, True)
+        assert_allclose(np.sqrt(tau2), t_PM, atol=6e-5)
+
+        k = len(eff)
+        # cochrane uniform weights
+        tau2_ca = _fit_tau_mm(eff, var_eff, np.ones(k) / k)
+        assert_allclose(np.sqrt(tau2_ca), t_CA, atol=6e-5)
+
+        # DL one step, and 1 iteration, reduced agreement with Kacker
+        tau2_dl = _fit_tau_mm(eff, var_eff, 1 / var_eff)
+        assert_allclose(np.sqrt(tau2_dl), t_DL, atol=1e-3)
+
+        tau2_dl_, converged = _fit_tau_iter_mm(eff, var_eff, tau2_start=0, maxiter=1)
+        assert_equal(converged, False)
+        assert_allclose(tau2_dl_, tau2_dl, atol=1e-10)
+
+        # C2 two step, start with CA
+        tau2_c2, converged = _fit_tau_iter_mm(
+            eff, var_eff, tau2_start=tau2_ca, maxiter=1
+        )
+        assert_equal(converged, False)
+        assert_allclose(np.sqrt(tau2_c2), t_C2, atol=6e-5)
+
+    def test_pm(self):
+        res = results_meta.exk1_metafor
+        eff, var_eff = self.eff, self.var_eff
+
+        tau2, converged = _fit_tau_iterative(eff, var_eff, tau2_start=0.1, atol=1e-8)
+        assert_equal(converged, True)
+        assert_allclose(tau2, res.tau2, atol=1e-10)
+
+        # compare with WLS, PM weights
+        mod_wls = WLS(eff, np.ones(len(eff)), weights=1 / (var_eff + tau2))
+        res_wls = mod_wls.fit(cov_type="fixed_scale")
+
+        assert_allclose(res_wls.params, res.b, atol=1e-13)
+        assert_allclose(res_wls.bse, res.se, atol=1e-10)
+        ci_low, ci_upp = res_wls.conf_int()[0]
+        assert_allclose(ci_low, res.ci_lb, atol=1e-10)
+        assert_allclose(ci_upp, res.ci_ub, atol=1e-10)
+
+        # need stricter atol to match metafor,
+        # I also used higher precision in metafor
+        res3 = combine_effects(eff, var_eff, method_re="pm", atol=1e-7)
+        # TODO: asserts below are copy paste, DRY?
+        assert_allclose(res3.tau2, res.tau2, atol=1e-10)
+        assert_allclose(res3.mean_effect_re, res.b, atol=1e-13)
+        assert_allclose(res3.sd_eff_w_re, res.se, atol=1e-10)
+
+        ci = res3.conf_int(use_t=False)[1]
+        assert_allclose(ci[0], res.ci_lb, atol=1e-10)
+        assert_allclose(ci[1], res.ci_ub, atol=1e-10)
+
+        assert_allclose(res3.q, res.QE, atol=1e-10)
+        # the following does not pass yet
+        # assert_allclose(res3.i2, res.I2 / 100, atol=1e-10)  # percent in R
+        # assert_allclose(res3.h2, res.H2, atol=1e-10)
+        th = res3.test_homogeneity()
+        q, pv = th.statistic, th.pvalue
+        df = th.df
+        assert_allclose(pv, res.QEp, atol=1e-10)
+        assert_allclose(q, res.QE, atol=1e-10)
+        assert_allclose(df, 9 - 1, atol=1e-10)
+
+    def test_dl(self):
+        res = results_meta.exk1_dl
+        eff, var_eff = self.eff, self.var_eff
+
+        tau2 = _fit_tau_mm(eff, var_eff, 1 / var_eff)
+        assert_allclose(tau2, res.tau2, atol=1e-10)
+
+        res3 = combine_effects(eff, var_eff, method_re="dl")
+        assert_allclose(res3.tau2, res.tau2, atol=1e-10)
+        assert_allclose(res3.mean_effect_re, res.b, atol=1e-13)
+        assert_allclose(res3.sd_eff_w_re, res.se, atol=1e-10)
+        ci = res3.conf_int(use_t=False)  # fe, re, fe_wls, re_wls
+        assert_allclose(ci[1][0], res.ci_lb, atol=1e-10)
+        assert_allclose(ci[1][1], res.ci_ub, atol=1e-10)
+
+        assert_allclose(res3.q, res.QE, atol=1e-10)
+        # I2 is in percent in metafor
+        assert_allclose(res3.i2, res.I2 / 100, atol=1e-10)
+        assert_allclose(res3.h2, res.H2, atol=1e-10)
+        th = res3.test_homogeneity()
+        q, pv = th
+        df = th.df
+        assert_allclose(pv, res.QEp, atol=1e-10)
+        assert_allclose(q, res.QE, atol=1e-10)
+        assert_allclose(df, 9 - 1, atol=1e-10)
+
+        # compare FE estimate
+        res_fe = results_meta.exk1_fe
+        assert_allclose(res3.mean_effect_fe, res_fe.b, atol=1e-13)
+        assert_allclose(res3.sd_eff_w_fe, res_fe.se, atol=1e-10)
+
+        assert_allclose(ci[0][0], res_fe.ci_lb, atol=1e-10)
+        assert_allclose(ci[0][1], res_fe.ci_ub, atol=1e-10)
+
+        # compare FE, RE with HKSJ adjustment
+        res_dls = results_meta.exk1_dl_hksj
+        res_fes = results_meta.exk1_fe_hksj
+
+        assert_allclose(res3.mean_effect_re, res_dls.b, atol=1e-13)
+        assert_allclose(res3.mean_effect_fe, res_fes.b, atol=1e-13)
+
+        assert_allclose(
+            res3.sd_eff_w_fe * np.sqrt(res3.scale_hksj_fe), res_fes.se, atol=1e-10
+        )
+        assert_allclose(
+            res3.sd_eff_w_re * np.sqrt(res3.scale_hksj_re), res_dls.se, atol=1e-10
+        )
+        assert_allclose(np.sqrt(res3.var_hksj_fe), res_fes.se, atol=1e-10)
+        assert_allclose(np.sqrt(res3.var_hksj_re), res_dls.se, atol=1e-10)
+
+        # metafor uses t distribution for hksj
+        ci = res3.conf_int(use_t=True)  # fe, re, fe_wls, re_wls
+        assert_allclose(ci[3][0], res_dls.ci_lb, atol=1e-10)
+        assert_allclose(ci[3][1], res_dls.ci_ub, atol=1e-10)
+        assert_allclose(ci[2][0], res_fes.ci_lb, atol=1e-10)
+        assert_allclose(ci[2][1], res_fes.ci_ub, atol=1e-10)
+
+        th = res3.test_homogeneity()
+        q, pv = th
+        df = th.df
+        assert_allclose(pv, res_dls.QEp, atol=1e-10)
+        assert_allclose(q, res_dls.QE, atol=1e-10)
+        assert_allclose(df, 9 - 1, atol=1e-10)
+
+
+class TestMetaBinOR:
+    # testing against results from R package `meta`
+
+    @classmethod
+    def setup_class(cls):
+        cls.res2 = res2 = results_meta.results_or_dl_hk
+        cls.dta = (res2.event_e, res2.n_e, res2.event_c, res2.n_c)
+
+        eff, var_eff = effectsize_2proportions(*cls.dta, statistic="odds-ratio")
+        res1 = combine_effects(eff, var_eff, method_re="chi2", use_t=True)
+        cls.eff = eff
+        cls.var_eff = var_eff
+        cls.res1 = res1
+
+    def test_basic(self):
+        res1 = self.res1
+        res2 = self.res2
+
+        assert_allclose(self.eff, res2.TE, rtol=1e-13)
+        assert_allclose(self.var_eff, res2.seTE**2, rtol=1e-13)
+
+        assert_allclose(res1.mean_effect_fe, res2.TE_fixed, rtol=1e-13)
+        # R meta does not adjust sd FE for HKSJ
+        assert_allclose(res1.sd_eff_w_fe, res2.seTE_fixed, rtol=1e-13)
+
+        assert_allclose(res1.q, res2.Q, rtol=1e-13)
+        assert_allclose(res1.tau2, res2.tau2, rtol=1e-10)
+
+        assert_allclose(res1.mean_effect_re, res2.TE_random, rtol=1e-13)
+        assert_allclose(res1.sd_eff_w_re_hksj, res2.seTE_random, rtol=1e-13)
+
+        th = res1.test_homogeneity()
+        q, pv = th
+        df = th.df
+        assert_allclose(q, res2.Q, rtol=1e-13)
+        assert_allclose(pv, res2.pval_Q, rtol=1e-13)
+        assert_allclose(df, res2.df_Q, rtol=1e-13)
+
+        assert_allclose(res1.i2, res2.I2, rtol=1e-13)
+        assert_allclose(res1.h2, res2.H**2, rtol=1e-13)
+
+        ci = res1.conf_int(use_t=True)  # fe, re, fe_wls, re_wls
+        # R meta does not adjust FE for HKSJ, still uses normal dist
+        # assert_allclose(ci[0][0], res2.lower_fixed, atol=1e-10)
+        # assert_allclose(ci[0][1], res2.upper_fixed, atol=1e-10)
+        assert_allclose(ci[3][0], res2.lower_random, rtol=1e-13)
+        assert_allclose(ci[3][1], res2.upper_random, rtol=1e-10)
+
+        ci = res1.conf_int(use_t=False)  # fe, re, fe_wls, re_wls
+        assert_allclose(ci[0][0], res2.lower_fixed, rtol=1e-13)
+        assert_allclose(ci[0][1], res2.upper_fixed, rtol=1e-13)
+
+        weights = 1 / self.var_eff
+        mod_glm = GLM(self.eff, np.ones(len(self.eff)), var_weights=weights)
+        res_glm = mod_glm.fit()
+        assert_allclose(res_glm.params, res2.TE_fixed, rtol=1e-13)
+
+        weights = 1 / (self.var_eff + res1.tau2)
+        mod_glm = GLM(self.eff, np.ones(len(self.eff)), var_weights=weights)
+        res_glm = mod_glm.fit()
+        assert_allclose(res_glm.params, res2.TE_random, rtol=1e-13)
+
+    @pytest.mark.thread_unsafe(reason="Uses matplotlib")
+    @pytest.mark.matplotlib
+    def test_plot(self, close_figures):
+        import matplotlib.pyplot as plt
+
+        # smoke tests
+        res1 = self.res1
+        # `use_t=False` avoids warning about missing nobs for use_t is true
+        res1.plot_forest(use_t=False)
+        res1.plot_forest(use_exp=True, use_t=False)
+        res1.plot_forest(alpha=0.01, use_t=False)
+        fig, ax = plt.subplots()
+        original_children = ax.get_children()
+        fig_out = res1.plot_forest(ax=ax, use_t=False)
+        updated_children = ax.get_children()
+        assert len(updated_children) > len(original_children)
+        assert fig_out is fig
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            res1.plot_forest(junk=5, use_t=False)
+
+
+def test_conf_int_samples():
+    from scipy import stats as sp_stats
+
+    from statsmodels.tools.sm_exceptions import InvalidTestWarning
+
+    rs = np.random.RandomState(918273)
+    k = 8
+    eff = rs.standard_normal(k)
+    var_eff = rs.uniform(0.5, 1.5, k)
+    res = combine_effects(eff, var_eff, method_re="dl")
+
+    ci_low, ci_upp = res.conf_int_samples(alpha=0.05, use_t=False)
+    crit = sp_stats.norm.isf(0.025)
+    assert_allclose(ci_low, res.eff - crit * res.sd_eff)
+    assert_allclose(ci_upp, res.eff + crit * res.sd_eff)
+    assert res.ci_sample_distr == "normal"
+
+    # cached: a second call with the same (alpha, use_t) returns the
+    # exact cached arrays rather than recomputing
+    ci_low2, ci_upp2 = res.conf_int_samples(alpha=0.05, use_t=False)
+    assert ci_low2 is ci_low
+    assert ci_upp2 is ci_upp
+
+    # use_t=True with nobs given uses the t distribution
+    nobs = 12
+    ci_low_t, ci_upp_t = res.conf_int_samples(alpha=0.05, use_t=True, nobs=nobs)
+    crit_t = sp_stats.t.isf(0.025, nobs - 1)
+    assert_allclose(ci_low_t, res.eff - crit_t * res.sd_eff)
+    assert res.ci_sample_distr == "t"
+
+    # use_t=True without nobs or ci_func falls back to normal with a warning
+    with pytest.warns(InvalidTestWarning, match="requires `nobs`"):
+        ci_low_fb, _ = res.conf_int_samples(alpha=0.1, use_t=True)
+    crit_fb = sp_stats.norm.isf(0.05)
+    assert_allclose(ci_low_fb, res.eff - crit_fb * res.sd_eff)
+    assert res.ci_sample_distr == "normal"
+
+    # a user-provided ci_func is used directly
+    sentinel = (np.zeros(k), np.ones(k))
+    ci_custom = res.conf_int_samples(alpha=0.2, ci_func=lambda alpha, **kw: sentinel)
+    assert ci_custom is sentinel
+    assert res.ci_sample_distr == "ci_func"
+
+
+def test_combine_effects_invalid_inputs_raises():
+    # negative variances previously produced negative inverse-variance
+    # weights and a "mean effect" far outside the range of the effects
+    eff = np.array([0.1, 0.2, -0.3])
+    with pytest.raises(ValueError, match="variance estimates must be non-negative"):
+        combine_effects(eff, np.array([0.02, -0.01, 0.03]))
+    with pytest.raises(ValueError, match="alpha must be in the range"):
+        combine_effects(eff, np.array([0.02, 0.01, 0.03]), alpha=1.5)
+    with pytest.raises(ValueError, match="alpha must be in the range"):
+        combine_effects(eff, np.array([0.02, 0.01, 0.03]), alpha=-0.1)
+
+    # sanity check: valid inputs unchanged
+    res = combine_effects(eff, np.array([0.02, 0.01, 0.03]))
+    assert np.isfinite(res.mean_effect_fe)
+
+
+@pytest.mark.parametrize("method_re", ["dl", "chi2"])
+def test_combine_effects_dl_tau2_truncated(method_re):
+    # GH#10520 regression test: the DerSimonian-Laird one-step tau^2 estimate
+    # was not truncated at zero. With these (nearly homogeneous) studies the
+    # raw estimate is (q - df) / c = -0.0561, which gave
+    # mean_effect_re = 0.4000, outside the range of the effects
+    # [0.28, 0.32], and a negative var_eff_w_re / NaN sd for other inputs.
+    # The published DL estimator and R metafor truncate tau^2 at 0, as does
+    # the Paule-Mandel path in this module (_fit_tau_iter_mm).
+    eff = np.array([0.30, 0.32, 0.28, 0.31])
+    var = np.array([0.04, 0.09, 0.05, 0.06])
+
+    res = combine_effects(eff, var, method_re=method_re)
+    assert res.tau2 == 0
+    # with tau2 = 0 the random effects results coincide with fixed effects
+    assert_allclose(res.mean_effect_re, res.mean_effect_fe, rtol=1e-13)
+    assert_allclose(res.sd_eff_w_re, res.sd_eff_w_fe, rtol=1e-13)
+    assert_allclose(res.weights_rel_re, res.weights_rel_fe, rtol=1e-13)
+    # the combined estimate is a weighted mean of the study effects
+    assert eff.min() <= res.mean_effect_re <= eff.max()
+    assert np.isfinite(res.sd_eff_w_re)
+    assert np.isfinite(res.sd_eff_w_re_hksj)
+
+    # the one-step method-of-moment estimate truncates as well, also with
+    # uniform weights, for which the raw estimate was -0.0597
+    assert _fit_tau_mm(eff, var, 1 / var) == 0
+    assert _fit_tau_mm(eff, var, np.ones(len(eff)) / len(eff)) == 0
+    tau2_iter, converged = _fit_tau_iter_mm(eff, var)
+    assert tau2_iter == 0
+    assert converged
+
+
+@pytest.mark.parametrize("method_re", ["dl", "chi2"])
+@pytest.mark.parametrize("case", ["ex_trunc", "ex_het6"])
+def test_combine_effects_dl_metafor(method_re, case):
+    # R metafor 5.2.1, see results_meta for the R calls. ex_trunc is the data
+    # of GH#10520 with truncated tau2, I2 = 0 and H2 = 1 in metafor.
+    # ex_het6 has a positive tau2 as a check that those results do not change.
+    res_dl = getattr(results_meta, f"{case}_dl")
+    res_dls = getattr(results_meta, f"{case}_dl_hksj")
+    res_fe = getattr(results_meta, f"{case}_fe")
+    if case == "ex_trunc":
+        eff = np.array([0.30, 0.32, 0.28, 0.31])
+        var = np.array([0.04, 0.09, 0.05, 0.06])
+    else:
+        eff = np.array([0.1, 0.5, 0.9, 0.3, 1.2, -0.2])
+        var = np.array([0.02, 0.05, 0.03, 0.04, 0.06, 0.02])
+
+    res = combine_effects(eff, var, method_re=method_re)
+    assert_allclose(res.tau2, res_dl.tau2, rtol=1e-12, atol=1e-15)
+    assert_allclose(res.mean_effect_re, res_dl.b, rtol=1e-13)
+    assert_allclose(res.sd_eff_w_re, res_dl.se, rtol=1e-12)
+    ci = res.conf_int(use_t=False)  # fe, re, fe_wls, re_wls
+    assert_allclose(ci[1], [res_dl.ci_lb, res_dl.ci_ub], rtol=1e-12)
+    assert_allclose(res.mean_effect_fe, res_fe.b, rtol=1e-13)
+    assert_allclose(res.sd_eff_w_fe, res_fe.se, rtol=1e-12)
+    assert_allclose(ci[0], [res_fe.ci_lb, res_fe.ci_ub], rtol=1e-12)
+
+    # metafor uses the t distribution with the HKSJ adjustment
+    assert_allclose(np.sqrt(res.var_hksj_re), res_dls.se, rtol=1e-12)
+    ci = res.conf_int(use_t=True)
+    # the quantile of the t distribution of some SciPy versions differs from R
+    # by about 2e-9 (relative)
+    assert_allclose(ci[3], [res_dls.ci_lb, res_dls.ci_ub], rtol=1e-7)
+
+    assert_allclose(res.q, res_dl.QE, rtol=1e-12)
+    assert_allclose(res.test_homogeneity().pvalue, res_dl.QEp, rtol=1e-10)
+    # I2 is in percent in metafor
+    assert_allclose(res.i2, res_dl.I2 / 100, rtol=1e-12, atol=1e-15)
+    assert_allclose(res.h2, res_dl.H2, rtol=1e-12)
+
+
+@pytest.mark.parametrize("method_re", ["dl", "chi2", "pm", "iterated"])
+def test_combine_effects_h2_i2_floor(method_re):
+    # GH#10520: h2 = q / (k - 1) is below 1 and i2 = 1 - 1 / h2 is negative if
+    # q < k - 1. They are floored at 1 and 0, the values for tau2 = 0.
+    eff = np.array([0.30, 0.32, 0.28, 0.31])
+    var = np.array([0.04, 0.09, 0.05, 0.06])
+    res = combine_effects(eff, var, method_re=method_re)
+    assert res.q < len(eff) - 1
+    assert res.h2 == 1
+    assert res.i2 == 0
+    assert res.tau2 == 0
+
+    # q == 0, all effects identical: i2 was -inf with a divide by zero warning.
+    # q is exactly zero in floating point for these values.
+    eff0 = np.full(3, 0.5)
+    var0 = np.array([0.25, 0.5, 1.0])
+    res0 = combine_effects(eff0, var0, method_re=method_re)
+    assert res0.q == 0
+    assert res0.h2 == 1
+    assert res0.i2 == 0
+    assert res0.tau2 == 0
+    assert_allclose(res0.mean_effect_re, 0.5, rtol=1e-14)
+
+    # q > k - 1 is not changed
+    eff = np.array([0.1, 0.5, 0.9, 0.3, 1.2, -0.2])
+    var = np.array([0.02, 0.05, 0.03, 0.04, 0.06, 0.02])
+    res = combine_effects(eff, var, method_re=method_re)
+    assert res.q > len(eff) - 1
+    assert_allclose(res.h2, res.q / (len(eff) - 1), rtol=1e-14)
+    assert_allclose(res.i2, 1 - (len(eff) - 1) / res.q, rtol=1e-14)
+
+
+@pytest.mark.parametrize("dist", [0.9, 1.0, 1.1])
+def test_combine_effects_dl_q_df_boundary(dist):
+    # Two studies with effects 0 and dist and variance 0.5 each have
+    # q = dist**2 and df = 1. The DL weights are constant and c = 2, so that
+    # tau2 = (q - df) / c if q > df. tau2 and i2 are zero at the boundary
+    # q == df and below.
+    eff = np.array([0.0, dist])
+    var = np.array([0.5, 0.5])
+    q = dist**2
+    tau2 = max(0, (q - 1) / 2)
+    h2 = max(1, q)
+
+    for method_re in ["dl", "chi2"]:
+        res = combine_effects(eff, var, method_re=method_re)
+        assert_allclose(res.q, q, rtol=1e-14)
+        assert_allclose(res.tau2, tau2, rtol=1e-12, atol=0)
+        assert_allclose(res.h2, h2, rtol=1e-14)
+        assert_allclose(res.i2, 1 - 1 / h2, rtol=1e-12, atol=0)
+        # equal weights, the mean is the average of the effects
+        assert_allclose(res.mean_effect_re, dist / 2, rtol=1e-14)
+        assert_allclose(res.sd_eff_w_re, np.sqrt((0.5 + tau2) / 2), rtol=1e-12)
+        if dist <= 1:
+            assert res.tau2 == 0
+            assert res.i2 == 0
+
+    # uniform and inverse variance weights coincide here
+    for weights in [np.ones(2), 1 / var, np.ones(2) / 2]:
+        tau2_mm = _fit_tau_mm(eff, var, weights)
+        assert_allclose(tau2_mm, tau2, rtol=1e-12, atol=0)
+        if dist <= 1:
+            assert tau2_mm == 0
+
+
+@pytest.mark.parametrize("convert", [list, tuple])
+def test_combine_effects_list_input(convert):
+    # lists and tuples are array_like, they failed with a TypeError
+    eff = [0.30, 0.32, 0.28, 0.31]
+    var = [0.04, 0.09, 0.05, 0.06]
+    res_arr = combine_effects(np.array(eff), np.array(var), method_re="dl")
+    res = combine_effects(effect=convert(eff), variance=convert(var), method_re="dl")
+    assert_allclose(res.mean_effect_re, res_arr.mean_effect_re, rtol=1e-14)
+    assert_allclose(res.sd_eff_w_re, res_arr.sd_eff_w_re, rtol=1e-14)
+    assert_allclose(res.q, res_arr.q, rtol=1e-14)
+    assert_allclose(res.summary_array()[0], res_arr.summary_array()[0], rtol=1e-14)
+
+    with pytest.raises(ValueError, match="variance estimates must be non-negative"):
+        combine_effects(convert(eff), convert([0.04, -0.09, 0.05, 0.06]))
+
+
+def test_combine_effects_series_input():
+    # pandas input is used as it is
+    eff = np.array([0.1, 0.5, 0.9, 0.3, 1.2, -0.2])
+    var = np.array([0.02, 0.05, 0.03, 0.04, 0.06, 0.02])
+    names = list("abcdef")
+    res_arr = combine_effects(eff, var, method_re="dl")
+    res = combine_effects(
+        pd.Series(eff, index=names), pd.Series(var, index=names), method_re="dl"
+    )
+    assert isinstance(res.eff, pd.Series)
+    assert_allclose(res.tau2, res_arr.tau2, rtol=1e-14)
+    assert_allclose(res.mean_effect_re, res_arr.mean_effect_re, rtol=1e-14)
+    assert_allclose(res.sd_eff_w_re, res_arr.sd_eff_w_re, rtol=1e-14)
+
+
+def test_effectsize_2proportions_invalid_counts_raises():
+    # counts outside [0, nobs] previously produced proportions outside
+    # [0, 1] (e.g. a risk "difference" larger than 1) without an error
+    with pytest.raises(ValueError, match="counts must be between 0"):
+        effectsize_2proportions(25, 20, 5, 30)
+    with pytest.raises(ValueError, match="counts must be between 0"):
+        effectsize_2proportions(-5, 20, 5, 30)
+    with pytest.raises(ValueError, match="counts must be between 0"):
+        effectsize_2proportions(10, 20, 35, 30)
+    with pytest.raises(ValueError, match="counts must be between 0"):
+        effectsize_2proportions(10, 20, -1, 30)
+
+    # boundary values remain valid
+    eff, var_eff = effectsize_2proportions(0, 20, 20, 30)
+    assert np.isfinite(eff).all()
+    eff, var_eff = effectsize_2proportions(20, 20, 30, 30)
+    assert np.isfinite(eff).all()

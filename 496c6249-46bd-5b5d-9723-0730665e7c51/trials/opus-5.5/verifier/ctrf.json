@@ -1,0 +1,49 @@
+{
+  "results": {
+    "tool": {
+      "name": "kraken-numpy-isin-verifier"
+    },
+    "summary": {
+      "tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794864028796,
+      "stop": 1794864028796
+    },
+    "tests": [
+      {
+        "name": "RL1",
+        "status": "passed",
+        "duration": 0,
+        "message": "no hit"
+      },
+      {
+        "name": "RL2",
+        "status": "passed",
+        "duration": 0,
+        "message": "no hit"
+      },
+      {
+        "name": "RL3",
+        "status": "passed",
+        "duration": 0,
+        "message": "no hit"
+      },
+      {
+        "name": "RL4",
+        "status": "passed",
+        "duration": 0,
+        "message": "no hit"
+      },
+      {
+        "name": "RL5",
+        "status": "passed",
+        "duration": 0,
+        "message": "no hit"
+      }
+    ]
+  }
+}

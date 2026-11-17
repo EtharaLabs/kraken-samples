@@ -1,0 +1,99 @@
+{
+ "child_overhead_sec": 60,
+ "correctness_timeout_sec": 2400,
+ "cpu_wall_limit": 1.1,
+ "harness_sha256": {
+  "opt/kraken/harness/child.py": "91e2ef6a9a10f3876ee1f4e04f8a67c2f985a79b3b3b36df819ae4e91028d99b",
+  "opt/kraken/harness/compare.py": "a1e3447d44bf44b08bddda0031528462ea43aa16fb38c781fb0306aab4759df0",
+  "opt/kraken/harness/measure.py": "45085c9fbf57e04888eeb68bdc5e2fcf394334630ecbe618e4d65e26238f125a",
+  "opt/kraken/harness/oracle.py": "683149f4d4a9a4248113b54c1afdae4bb29579ca98058492ae2f2a1e50ee0651",
+  "opt/kraken/harness/repotests.py": "6d314e51d47ef68a0e6fe5eb89ddd274a1e34300f45ff82a0d5d2fa2cb2f1efb",
+  "opt/kraken/harness/runner.py": "d10e1ec1ce3a51d26615a331b51b5b0960b7385fdea02d432211e30508a74763",
+  "opt/kraken/harness/tests.json": "ab53816e8ff65fb2725e98857f29547f8fde6cf60f015afa4d1ab1525e1a69b7",
+  "opt/kraken/harness/treeops.py": "b40ca8769714094e42cf4b459da6105c7c58bff41c635b8cbb6cb064c3cc96c3",
+  "opt/kraken/harness/workloads.py": "52d2ebe62edcb9bca912c7f5aef9ad9fa82064fbdb9aeae3d7db658e569f4d9d",
+  "opt/kraken/judge_guard.py": "bf074faac7aade94aa7553cd670be751b6bcb53271d9219acdedfff198d960db",
+  "tests/diag_correctness.py": "8c6f7107920c6c5ccb48745a557971f276064977f2581bc447314953cd8771f0",
+  "tests/diag_noise.py": "f783a053dc609088a5e7a4374a35e006b595b6982e25491979b8902749c03ca2",
+  "tests/diag_speedup.py": "a0d1179588ec4859b59f85c2dc91c187530820265b0716e3afd07107e8585eb2",
+  "tests/diag_stage.py": "950a8f4da70937580fc460a15b78bae2de30b252274d6407319c8d3e1073e488",
+  "tests/judge.toml": "ee7993062e63164ef37001f7ac954e1d4354acda93a2aafb173770b80297c417",
+  "tests/reward.toml": "6dab373803c1c0bf760605daed91cd51e472533e8d0625c922fd425245b573b1",
+  "tests/test.sh": "a33c23b652dc4fc0718b641dd36f7f4f667d5ef84e5589e277b348a19685b233",
+  "tests/test_output.py": "a9a3840c24ba13291136810ab2a986c63248de17c3b8da5f89899af7e605bb9d"
+ },
+ "noise_band_limit": 0.02,
+ "per_call_budget_sec": 60,
+ "plan": {
+  "narrow": 6,
+  "near_collinear": 6,
+  "near_log10_cond": [
+   5.02,
+   6.68
+  ],
+  "nobs_max": 2000,
+  "nobs_min": 50,
+  "well_repeats": 2
+ },
+ "pytest_timeout_sec": 2400,
+ "runner_uid": 10001,
+ "test_files": [
+  "statsmodels/tsa/tests/test_stattools.py",
+  "statsmodels/tsa/tests/test_lagselect.py"
+ ],
+ "timed_workloads": [
+  {
+   "autolag": null,
+   "id": "w1",
+   "nobs": 199871,
+   "regression": "c",
+   "trim": 0.15
+  },
+  {
+   "autolag": null,
+   "id": "w2",
+   "nobs": 149953,
+   "regression": "c",
+   "trim": 0.33
+  },
+  {
+   "autolag": null,
+   "id": "w3",
+   "nobs": 99989,
+   "regression": "c",
+   "trim": 0.05
+  },
+  {
+   "autolag": null,
+   "id": "w4",
+   "nobs": 59971,
+   "regression": "t",
+   "trim": 0.33
+  },
+  {
+   "autolag": null,
+   "id": "w5",
+   "nobs": 60023,
+   "regression": "ct",
+   "trim": 0.33
+  },
+  {
+   "autolag": "AIC",
+   "id": "w6",
+   "nobs": 100019,
+   "regression": "c",
+   "trim": 0.33
+  }
+ ],
+ "timing_pairs": 11,
+ "visible": {
+  "literals": [
+   "20261103",
+   "3000",
+   "3.5562980420363317",
+   "0.6430439689661199"
+  ],
+  "nobs": 3000,
+  "seed": 20261103
+ }
+}

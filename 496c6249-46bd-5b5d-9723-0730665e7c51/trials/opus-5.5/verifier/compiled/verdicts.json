@@ -1,0 +1,232 @@
+{
+ "compiled": {
+  "correctness": 1.0,
+  "reward": 0.3697,
+  "worst_case_speedup": 37.7271
+ },
+ "gate": "open",
+ "items": {
+  "d1_constraints_build_succeeds": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "d1_constraints_results_equal": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "d1_coverage_mixed_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 588.38380682895,
+    "sr": 0.08984202629246683,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 52.861593443188255
+   },
+   "score": 0.0946,
+   "verdict": "accept"
+  },
+  "d1_coverage_nan_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 847.7878400484232,
+    "sr": 0.05200637099084106,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 44.09036893108211
+   },
+   "score": 0.0547,
+   "verdict": "accept"
+  },
+  "d1_coverage_none_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 1481.9780793718307,
+    "sr": 0.04079907641557792,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 60.463336906502725
+   },
+   "score": 0.0429,
+   "verdict": "accept"
+  },
+  "d1_coverage_object_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 1220.2355455868696,
+    "sr": 0.046236836177146454,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 56.41983101883101
+   },
+   "score": 0.0487,
+   "verdict": "accept"
+  },
+  "d1_coverage_str_na_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 1176.0762513688119,
+    "sr": 0.054206843890541444,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 63.751381761322364
+   },
+   "score": 0.0571,
+   "verdict": "accept"
+  },
+  "d1_craft_debug_code_left": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "d1_outcome_plain_speedup": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "reference_speedup": 755.7814684363047,
+    "sr": 0.04991803929712528,
+    "tau": 2.0,
+    "verdict": "accept",
+    "worst_speedup": 37.72712904144251
+   },
+   "score": 0.0525,
+   "verdict": "accept"
+  },
+  "d1_process_outside_library_edit": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "d1_robustness_covering_tests": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "d1_robustness_timed_masks_equal": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl1_constraints_protected_edit": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl1_robustness_harness_changed": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl2_constraints_persistence_api": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl2_robustness_leftover_files": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl3_constraints_context_read": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl4_constraints_visible_literal": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  },
+  "rl5_constraints_public_api_changed": {
+   "detail": {
+    "credit": 0.05842266544977175,
+    "gates": "open",
+    "holds": true,
+    "tau": 2.0,
+    "verdict": "accept"
+   },
+   "score": 1.0,
+   "verdict": "accept"
+  }
+ },
+ "red_lines": []
+}

@@ -1,0 +1,211 @@
+--- a/statsmodels/tsa/_lagselect.py
++++ b/statsmodels/tsa/_lagselect.py
+@@ -25,9 +25,8 @@
+     ----------
+     r : ndarray
+         The upper triangular factor of the regressors of the largest model
+-        and the dependent variables, including any indicator columns. If
+-        ``exog`` has a constant column, the lags and the dependent variables
+-        are shifted by constants, see ``nested_lag_ols``.
++        and the dependent variables, including any indicator columns, after
++        subtracting ``offset``.
+     nobs : ndarray
+         The number of observations used by each order.
+     df_model : ndarray
+@@ -42,6 +41,11 @@
+     tvalues_last : ndarray
+         The t-value(s) of the coefficient(s) of the last regressor of each
+         order, using ``ssr / (nobs - df_model)`` as the residual variance.
++    offset : ndarray
++        The constants subtracted from the columns of ``[exog, lags, endog]``
++        before the decomposition, of shape (k + neqs,). Zero unless ``exog``
++        has a constant column, see ``nested_lag_ols``. A caller that combines
++        ``r`` with the data must subtract the same constants.
+     """
+ 
+     r: np.ndarray
+@@ -50,6 +54,7 @@
+     ssr: np.ndarray
+     params_last: np.ndarray
+     tvalues_last: np.ndarray
++    offset: np.ndarray
+ 
+ 
+ def _as_blocks(lags, nobs):
+@@ -189,7 +194,8 @@
+     reduce the accuracy or trigger the fit check. The rank check is applied
+     to the original columns, as the solver that is replaced sees them. The
+     coefficient of the constant of order 0 is corrected for the shift. The
+-    factor ``r`` belongs to the centered data.
++    factor ``r`` belongs to the centered data, and ``offset`` holds the
++    means that were subtracted.
+ 
+     Designs that are nearly collinear are still accepted if the rank check
+     passes, which is the case up to a condition number of about ``1e12``
+@@ -362,4 +368,6 @@
+     if univariate:
+         params_last = params_last[:, 0]
+         tvalues_last = tvalues_last[:, 0]
+-    return NestedLagOLSResults(r, nobs_order, df_model, ssr, params_last, tvalues_last)
++    return NestedLagOLSResults(
++        r, nobs_order, df_model, ssr, params_last, tvalues_last, offset
++    )
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -13,6 +13,7 @@
+ import pandas as pd
+ from scipy import stats
+ from scipy.interpolate import interp1d
++from scipy.linalg import solve_triangular
+ from scipy.signal import correlate
+ 
+ from statsmodels.regression.linear_model import OLS, yule_walker
+@@ -4174,6 +4175,76 @@
+             exog[(cutoff - 1) :, 2] = trend[0 : (nobs - period + 1)]
+         return exog
+ 
++    def _break_tvalues(
++        self, endog, exog, regression, periods, nobs, const, trend, cols, lags
++    ):
++        nreg = exog.shape[0]
++        nper = periods.shape[0]
++        k = lags + 2
++        m = 2 if regression == "ct" else 1
++        f = periods - (lags + 1)
++        if regression == "t":
++            f = f - 1
++        if (
++            nper == 0
++            or nreg <= k + m + 1
++            or f[0] < 0
++            or f[-1] >= nreg
++        ):
++            return None
++        F = np.empty((nreg, k))
++        F[:, 0] = const
++        F[:, 1] = trend[(lags + 2) : (nobs + 1)]
++        F[:, 2:] = exog[:, cols:]
++        L = exog[:, cols - 1 : cols]
++        tol = np.sqrt(np.finfo(float).eps)
++        res = nested_lag_ols(endog, L, F, rcond=tol)
++        if res is None:
++            return None
++        r = res.r
++
++        data = np.column_stack([F, L, endog]) - res.offset
++        t_ = np.cumsum(data[::-1], axis=0)[::-1]
++        n_ = (nreg - f).astype(float)
++        ncols = data.shape[1]
++        xd = np.empty((ncols, nper, m))
++        dd = np.empty((nper, m, m))
++        if regression != "t":
++            xd[:, :, 0] = t_[f].T
++            dd[:, 0, 0] = n_
++        if regression != "c":
++            xd[:, :, -1] = np.cumsum(t_[::-1], axis=0)[::-1][f].T
++            dd[:, -1, -1] = n_ * (n_ + 1) * (2 * n_ + 1) / 6
++        if regression == "ct":
++            dd[:, 0, 1] = dd[:, 1, 0] = n_ * (n_ + 1) / 2
++
++        c = solve_triangular(r, xd.reshape(ncols, -1), trans="T")
++        c = c.reshape(ncols, nper, m).transpose(1, 0, 2)
++        q = c[:, :k]
++        s = dd - q.transpose(0, 2, 1) @ q
++        ok = s[:, 0, 0] > tol * dd[:, 0, 0]
++        if m == 2:
++            with np.errstate(divide="ignore", invalid="ignore"):
++                pivot = s[:, 1, 1] - s[:, 0, 1] ** 2 / s[:, 0, 0]
++            ok &= pivot > tol * dd[:, 1, 1]
++        if not np.all(ok):
++            return None
++        h = np.linalg.cholesky(s)
++        w = r[k:, k:]
++        v = np.linalg.solve(h, c[:, k:].transpose(0, 2, 1) @ w)
++        g = w.T @ w - v.transpose(0, 2, 1) @ v
++        g0 = g[:, 0, 0]
++        with np.errstate(divide="ignore", invalid="ignore"):
++            z = g[:, 0, 1] / np.sqrt(g0)
++        ssr = g[:, 1, 1] - z**2
++        if not (
++            np.all(g0 > tol * w[0, 0] ** 2)
++            and np.all(ssr > tol * w[1, 1] ** 2)
++        ):
++            return None
++        df_resid = nreg - (k + m + 1)
++        return z / np.sqrt(ssr / df_resid)
++
+     def run(self, x, trim=0.15, maxlag=None, regression="c", autolag="AIC"):
+         """
+         Zivot-Andrews structural-break unit-root test
+@@ -4289,31 +4360,47 @@
+         endog, exog = self._format_regression_data(
+             x, nobs, c_const, t_const, basecols, baselags
+         )
+-        # iterate through the time periods
+         stats = np.full(end_period + 1, np.inf)
+-        for bp in range(start_period + 1, end_period + 1):
+-            # update intercept dummy / trend / trend dummy
+-            exog = self._update_regression_exog(
+-                exog,
+-                regression,
+-                bp,
+-                nobs,
+-                c_const,
+-                t_const,
+-                basecols,
+-                baselags,
+-            )
+-            # check exog rank on first iteration
+-            if bp == start_period + 1:
+-                o = OLS(endog[baselags:], exog, hasconst=1).fit()
+-                if o.df_model < exog.shape[1] - 1:
+-                    raise ValueError(
+-                        "ZA: auxiliary exog matrix is not full rank.\n"
+-                        f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
+-                    )
+-                stats[bp] = o.tvalues[basecols - 1]
+-            else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++        periods = np.arange(start_period + 1, end_period + 1)
++        tvalues = self._break_tvalues(
++            endog[baselags:],
++            exog,
++            regression,
++            periods,
++            nobs,
++            c_const,
++            t_const,
++            basecols,
++            baselags,
++        )
++        if tvalues is not None:
++            stats[periods] = tvalues
++        else:
++            # iterate through the time periods
++            for bp in range(start_period + 1, end_period + 1):
++                # update intercept dummy / trend / trend dummy
++                exog = self._update_regression_exog(
++                    exog,
++                    regression,
++                    bp,
++                    nobs,
++                    c_const,
++                    t_const,
++                    basecols,
++                    baselags,
++                )
++                # check exog rank on first iteration
++                if bp == start_period + 1:
++                    o = OLS(endog[baselags:], exog, hasconst=1).fit()
++                    if o.df_model < exog.shape[1] - 1:
++                        raise ValueError(
++                            "ZA: auxiliary exog matrix is not full rank.\n"
++                            f"  cols (exc intercept) = {exog.shape[1] - 1}"
++                            f"  rank = {o.df_model}"
++                        )
++                    stats[bp] = o.tvalues[basecols - 1]
++                else:
++                    stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

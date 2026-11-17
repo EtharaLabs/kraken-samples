@@ -1,0 +1,15 @@
+-r mypy.txt
+-r pytest.txt
+-r format.txt
+-r pylint.txt
+-r protos.txt
+-r notebook.txt
+-r tensorflow-docs.txt
+-r packaging.txt
+-r ruff.txt
+
+# For verifying behavior of qasm output.
+qiskit-aer~=0.17.0
+
+# For testing stimcirq compatibility (cirq-google)
+stimcirq

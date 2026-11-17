@@ -1,0 +1,258 @@
+diff --git a/numpy/_core/src/multiarray/stringdtype/dtype.c b/numpy/_core/src/multiarray/stringdtype/dtype.c
+--- a/numpy/_core/src/multiarray/stringdtype/dtype.c
++++ b/numpy/_core/src/multiarray/stringdtype/dtype.c
+@@ -961,7 +961,160 @@
+             self->coerce);
+ }
+ 
++
++/* Hash-based membership for two promoted StringDType arrays (private, used by np.isin). */
++typedef struct {
++    uint64_t hash;
++    size_t size;
++    const char *buf;
++} isin_slot;
++
++static inline uint64_t
++isin_hash(const char *p, size_t n)
++{
++    uint64_t h = 0x9E3779B97F4A7C15ULL ^ (uint64_t)n;
++    while (n >= 8) {
++        uint64_t k;
++        memcpy(&k, p, 8);
++        k *= 0xBF58476D1CE4E5B9ULL;
++        k ^= k >> 31;
++        h = (h ^ k) * 0x94D049BB133111EBULL;
++        p += 8;
++        n -= 8;
++    }
++    if (n) {
++        uint64_t k = 0;
++        memcpy(&k, p, n);
++        k *= 0xBF58476D1CE4E5B9ULL;
++        k ^= k >> 31;
++        h = (h ^ k) * 0x94D049BB133111EBULL;
++    }
++    h ^= h >> 29;
++    return h ? h : 1;
++}
++
++static inline int
++isin_find(isin_slot *table, size_t mask, uint64_t h, const char *buf, size_t size)
++{
++    size_t k = (size_t)h & mask;
++    while (table[k].hash) {
++        if (table[k].hash == h && table[k].size == size &&
++                (size == 0 || memcmp(table[k].buf, buf, size) == 0)) {
++            return 1;
++        }
++        k = (k + 1) & mask;
++    }
++    return 0;
++}
++
++static PyObject *
++stringdtype__isin(PyArray_StringDTypeObject *self, PyObject *args)
++{
++    PyArrayObject *ar1, *ar2;
++    int invert;
++    if (!PyArg_ParseTuple(args, "O!O!p", &PyArray_Type, &ar1, &PyArray_Type, &ar2, &invert)) {
++        return NULL;
++    }
++    if (PyArray_NDIM(ar1) != 1 || PyArray_NDIM(ar2) != 1 ||
++            NPY_DTYPE(PyArray_DESCR(ar1)) != &PyArray_StringDType ||
++            NPY_DTYPE(PyArray_DESCR(ar2)) != &PyArray_StringDType) {
++        PyErr_SetString(PyExc_TypeError, "_isin needs two 1-D StringDType arrays");
++        return NULL;
++    }
++    npy_intp n = PyArray_DIM(ar1, 0), m = PyArray_DIM(ar2, 0);
++    npy_intp dims[1] = {n};
++    PyArrayObject *out = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_BOOL);
++    if (out == NULL) {
++        return NULL;
++    }
++    size_t cap = 16;
++    while (cap < (size_t)m * 2 + 1) {
++        cap <<= 1;
++    }
++    isin_slot *table = PyMem_RawCalloc(cap, sizeof(isin_slot));
++    if (table == NULL) {
++        Py_DECREF(out);
++        return PyErr_NoMemory();
++    }
++    int has_null = self->na_object != NULL;
++    int has_nan_na = self->has_nan_na;
++    int has_string_na = self->has_string_na;
++    npy_static_string default_string = self->default_string;
++
++    PyArray_Descr *descrs[2] = {PyArray_DESCR(ar1), PyArray_DESCR(ar2)};
++    npy_string_allocator *allocators[2] = {NULL, NULL};
++    NpyString_acquire_allocators(2, descrs, allocators);
++    int b_has_null = 0, failed = 0;
++    npy_static_string s = {0, NULL};
++    char *data = PyArray_BYTES(ar2);
++    npy_intp stride = PyArray_STRIDE(ar2, 0);
++    for (npy_intp j = 0; j < m; j++, data += stride) {
++        int r = NpyString_load(allocators[1], (npy_packed_static_string *)data, &s);
++        if (r == -1) {
++            failed = 1;
++            break;
++        }
++        if (r == 1) {
++            if (has_nan_na || !has_null) {
++                continue;
++            }
++            if (!has_string_na) {
++                b_has_null = 1;
++                continue;
++            }
++            s = default_string;
++        }
++        uint64_t h = isin_hash(s.buf, s.size);
++        size_t k = (size_t)h & (cap - 1);
++        while (table[k].hash) {
++            if (table[k].hash == h && table[k].size == s.size &&
++                    (s.size == 0 || memcmp(table[k].buf, s.buf, s.size) == 0)) {
++                break;
++            }
++            k = (k + 1) & (cap - 1);
++        }
++        if (!table[k].hash) {
++            table[k].hash = h;
++            table[k].size = s.size;
++            table[k].buf = s.buf;
++        }
++    }
++    npy_bool *o = (npy_bool *)PyArray_DATA(out);
++    data = PyArray_BYTES(ar1);
++    stride = PyArray_STRIDE(ar1, 0);
++    for (npy_intp i = 0; !failed && i < n; i++, data += stride) {
++        int r = NpyString_load(allocators[0], (npy_packed_static_string *)data, &s);
++        int hit;
++        if (r == -1) {
++            failed = 1;
++            break;
++        }
++        if (r == 1 && (has_nan_na || !has_null)) {
++            hit = 0;
++        }
++        else if (r == 1 && !has_string_na) {
++            hit = b_has_null;
++        }
++        else {
++            if (r == 1) {
++                s = default_string;
++            }
++            hit = isin_find(table, cap - 1, isin_hash(s.buf, s.size), s.buf, s.size);
++        }
++        o[i] = (npy_bool)(hit != invert);
++    }
++    NpyString_release_allocators(2, allocators);
++    PyMem_RawFree(table);
++    if (failed) {
++        Py_DECREF(out);
++        PyErr_SetString(PyExc_MemoryError, "Failed to load string in StringDType _isin");
++        return NULL;
++    }
++    return (PyObject *)out;
++}
++
+ static PyMethodDef PyArray_StringDType_methods[] = {
++        {"_isin", (PyCFunction)stringdtype__isin, METH_VARARGS, NULL},
+         {
+                 "__reduce__",
+                 (PyCFunction)stringdtype__reduce__,
+diff --git a/numpy/lib/_arraysetops_impl.py b/numpy/lib/_arraysetops_impl.py
+--- a/numpy/lib/_arraysetops_impl.py
++++ b/numpy/lib/_arraysetops_impl.py
+@@ -913,49 +913,32 @@
+     if (ar1.dtype.kind == "T" or ar2.dtype.kind == "T") and (
+             ar1.dtype.kind in "TU" and ar2.dtype.kind in "TU"):
+         try:
+-            # promote to the result dtype so we can use the fast hashing path
++            # promote both operands to one StringDType
+             string_dtype = np.result_type(ar1, ar2)
+         except TypeError:
+-            # fall back to slow sorting path with e.g. ar1.na_object == None
+-            # and ar2.na_object == np.nan
++            # incompatible missing values (e.g. ar1.na_object is None and
++            # ar2.na_object is np.nan) keep the comparison loop below
+             pass
++    if string_dtype is not None:
++        # Hash the promoted operands in C. The dtype's own comparison rules for
++        # missing values apply: a NaN-like missing value never matches, a string
++        # missing value compares as its string, and any other missing value
++        # matches only a missing value. A cast between equal StringDType
++        # instances still copies, so it is skipped.
++        if ar1.dtype != string_dtype:
++            ar1 = ar1.astype(string_dtype)
++        if ar2.dtype != string_dtype:
++            ar2 = ar2.astype(string_dtype)
++        return string_dtype._isin(ar1, ar2, invert)
+ 
+     # Check if one of the arrays may contain arbitrary objects
+-    contains_object = (ar1.dtype.hasobject or ar2.dtype.hasobject) and (
+-        string_dtype is None)
+-
+-    scalar_comparisons_are_faster = len(ar2) < 10 * len(ar1) ** 0.145
+-    result = None
+-    # Remove non-NaN missing values before sorting. Non-string sentinels
+-    # cannot be ordered with strings. String sentinels are sortable, but
+-    # filtering is faster when missing values are common and adds only a
+-    # small overhead otherwise.
+-    if (not scalar_comparisons_are_faster and string_dtype is not None and
+-            string_dtype._has_na and not string_dtype._has_nan_na):
+-        na = np.asarray(string_dtype.na_object, dtype=string_dtype)
+-        missing1, missing2 = ar1 == na, ar2 == na
+-        has_missing2 = missing2.any()
+-        if missing1.any():
+-            result = np.full(
+-                ar1.shape, has_missing2 != invert, dtype=bool)
+-            valid1 = ~missing1
+-            ar1 = ar1[valid1]
+-        if has_missing2:
+-            ar2 = ar2[~missing2]
+-        # Filtering can make scalar comparisons cheaper than sorting.
+-        scalar_comparisons_are_faster = len(ar2) < 10 * len(ar1) ** 0.145
+-
+-    # Use direct comparisons for few candidates or arbitrary objects, which
+-    # cannot be sorted reliably.
+-    if scalar_comparisons_are_faster or contains_object:
+-        if string_dtype is not None:
+-            # StringDType scalars are str or na_object, so ensure iteration
+-            # always produces arrays this could be deleted if StringDType ever
+-            # grew a NumPy scalar type
+-            ar2 = ar2.reshape(-1, 1)
+-            if ar2.dtype.kind == "T" and ar2.dtype._has_nan_na:
+-                na_object = ar2.dtype.na_object
+-                ar2 = (a for a in ar2 if a[0] is not na_object)
++    contains_object = ar1.dtype.hasobject or ar2.dtype.hasobject
++
++    # This code is run when
++    # a) the first condition is true, making the code significantly faster
++    # b) the second condition is true (i.e. `ar1` or `ar2` may contain
++    #    arbitrary objects), since then sorting is not guaranteed to work
++    if len(ar2) < 10 * len(ar1) ** 0.145 or contains_object:
+         if invert:
+             mask = np.ones(len(ar1), dtype=bool)
+             for a in ar2:
+@@ -964,16 +947,9 @@
+             mask = np.zeros(len(ar1), dtype=bool)
+             for a in ar2:
+                 mask |= (ar1 == a)
+-    else:
+-        mask = _isin_sorting(ar1, ar2, assume_unique, invert)
+-
+-    if result is not None:
+-        result[valid1] = mask
+-        return result
+-    return mask
+-
+-
+-def _isin_sorting(ar1, ar2, assume_unique, invert):
++        return mask
++
++    # Otherwise use sorting
+     if not assume_unique:
+         ar1, rev_idx = np.unique(ar1, return_inverse=True)
+         ar2 = np.unique(ar2)

@@ -1,0 +1,13 @@
+*
+!sk-requirements.txt
+!rewardkit-requirements.txt
+!harness/
+!harness/*.py
+!harness/*.json
+!expert/
+!expert/**
+**/__pycache__
+!score.py
+!judge_guard.py
+!test.sh
+!judge.toml

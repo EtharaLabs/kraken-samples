@@ -1,0 +1,72 @@
+{
+    "schema_version": 2,
+    "task": {
+        "name": "402717e5-0ada-5914-bc78-01e7b1d9337b",
+        "version": "0.1.0",
+        "type": "local",
+        "digest": "sha256:fd38140fd6d40261d5e9cea9374a9b3d1f8e56a324710b4146ce174eee4c4bcf",
+        "source": "kraken",
+        "path": "402717e5-0ada-5914-bc78-01e7b1d9337b"
+    },
+    "install_only": false,
+    "timeout_multiplier": 1.0,
+    "agent_setup_timeout_multiplier": 10.0,
+    "agent": {
+        "name": "claude-code",
+        "model_name": "anthropic/claude-opus-5-5",
+        "base_url": "http://172.17.0.1:18796",
+        "model_api_key_name": "ANTHROPIC_API_KEY",
+        "model_api_format": "anthropic_messages",
+        "skip_model_parsing": false,
+        "skills": [],
+        "resume_trajectory": false,
+        "extra_allowed_hosts": [],
+        "kwargs": {
+            "thinking_display": "summarized"
+        },
+        "env": {
+            "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+        },
+        "mcp_servers": []
+    },
+    "bridge_inputs": {},
+    "skills": [],
+    "environment": {
+        "type": "docker",
+        "force_build": false,
+        "delete": true,
+        "stream": false,
+        "cpu_enforcement_policy": "auto",
+        "memory_enforcement_policy": "auto",
+        "extra_docker_compose": [
+            "agent-hosts.compose.yaml"
+        ],
+        "kwargs": {},
+        "extra_allowed_hosts": [
+            "deb.debian.org",
+            "security.debian.org",
+            "snapshot.debian.org",
+            "downloads.claude.ai",
+            "storage.googleapis.com",
+            "registry.npmjs.org"
+        ]
+    },
+    "extra_docker_compose": [
+        {
+            "path": "agent-hosts.compose.yaml",
+            "digest": "sha256:a9b2e99a35250871e6d9d21597ce45a1e75d6f0bf2756aff354975663739ee86"
+        }
+    ],
+    "verifier": {
+        "env": {
+            "REWARDKIT_JUDGE": "${REWARDKIT_JUDGE}",
+            "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+            "OPENAI_BASE_URL": "${OPENAI_BASE_URL}"
+        },
+        "disable": false,
+        "extra_allowed_hosts": [
+            "172.17.0.1"
+        ],
+        "environment_mode": "separate"
+    }
+}

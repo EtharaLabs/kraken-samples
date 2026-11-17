@@ -1,0 +1,13 @@
+Processing /opt/kraken/work/graded
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: numpy
+  Building wheel for numpy (pyproject.toml): started
+  Building wheel for numpy (pyproject.toml): finished with status 'done'
+  Created wheel for numpy: filename=numpy-2.6.0.dev0-cp313-cp313-linux_x86_64.whl size=10627004 sha256=fe74d1b460e0588599a03a110015b419c4f5e2cce9428e234bfcda7161e34e23
+  Stored in directory: /opt/kraken/scratch/tmp6qwy4ur7/tmp/pip-ephem-wheel-cache-rfbhurpc/wheels/c4/b4/c5/e240f958a271e67b16c1aa89d76c9e6934566c9ad337dea5ec
+Successfully built numpy
+Installing collected packages: numpy
+Successfully installed numpy-2.6.0.dev0
+
+--- stderr ---

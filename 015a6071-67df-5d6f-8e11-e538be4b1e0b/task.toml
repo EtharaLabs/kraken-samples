@@ -1,0 +1,93 @@
+schema_version = "1.4"
+reward_type = "bounded_continuous"
+
+# D1: the modified Cirq working tree. Harbor snapshots it out of the agent container and
+# re-materializes it at the same path in the separate verifier.
+artifacts = [
+  { source = "/app/cirq", exclude = [".git", "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info", "build", ".mypy_cache", ".ruff_cache"] },
+]
+
+[task]
+name = "ethara/015a6071-67df-5d6f-8e11-e538be4b1e0b"
+version = "0.1.0"
+description = """
+Make Cirq's single-qubit merge transformers (merge_single_qubit_gates_to_phxz, merge_single_qubit_moments_to_phxz, merge_single_qubit_gates_to_phased_x_and_z) and the unitary of one-qubit circuit operations faster without changing any result. Continuous reward over three hidden, seed-randomized workload families, timed against a fast reference implementation:
+Family speed score S_f for f in F1, F2, F3: over that family's hidden cases, the median
+of clamp(ln(T_base / T_sub) / ln(T_base / T_ref), 0, 1), where T is the median of the
+repeated timings of the case, each in a fresh process. A speedup over base below the
+calibrated noise band counts as no speedup (0), and a submission within the noise band
+of the reference counts as the reference (1). S_f is 0 when any case of f is not
+equivalent to the base output or the submission's run fails.
+Judged score J: the weighted mean of the judged items of tests/judge.toml, 0 for an
+empty diff.
+With no judge configured: reward = (0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3) / 0.85.
+With a judge configured:  reward = 0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3 + 0.15 J.
+A red line or a failed covering test sets the reward to 0. No term multiplies J by any
+speed score.
+"""
+authors = [{ name = "yasir.aliint17", email = "yasir.aliint17@ethara.ai" }]
+keywords = ["python", "cirq", "quantum-circuits", "transformers", "performance-optimization", "long-horizon", "continuous-reward"]
+
+[metadata]
+null_floor = 0.0
+discrimination_weight = 0.5
+platforms = ["linux/amd64", "linux/arm64"]
+archetype = "perf-optimization-repo"
+category = "long-horizon"
+tags = []
+
+[metadata.contamination]
+public_source = "https://github.com/quantumlib/Cirq/pull/8197"
+public_since = "2026-08-01"
+note = "The task is built from a public upstream pull request (Apache-2.0), merged 2026-08-01T01:14:28Z. Models trained on data after 2026-08-01 may have seen that fix; treat scores from such models as possibly memorized. The graded reference is not that pull request but a faster original implementation written for this task (solution/reference.patch): reproducing the public fix alone scores about 0.3 compiled, so memorization of the fix does not saturate the reward."
+
+[metadata.task_spec]
+editable_surface = "/app/cirq/cirq-core/cirq/ (library source only; *_test.py, conftest.py, cirq/testing/ and JSON test data are protected)"
+output_location = "the edited /app/cirq tree, snapshotted in place for the separate verifier"
+equivalence = "same moment count; per moment the same operations on the same qubits and tags, unitaries equal up to global phase within 1e-7, product of global phase operations equal within 1e-7; cirq.unitary results equal within 1e-7"
+units = "wall-clock seconds of one entry-point call (and a walk over its result) per hidden case, median of 3 fresh-process repetitions rotated across base, reference and submission"
+families = "F1 merge_single_qubit_gates_to_phxz on gauge-transformed trotter circuits (0.25); F2 merge_single_qubit_moments_to_phxz on runs of 2-24 single-qubit moments and trotter circuits (0.40); F3 merge_single_qubit_gates_to_phased_x_and_z, cirq.unitary of one-qubit CircuitOperations, deep merging with tags_to_ignore and global phases (0.20)"
+noise_band = "per family, the largest ln spread of the base tree's own repeated timings, clamped to [0.05, 0.15]"
+judge = "optional; 5 binary craft items in tests/judge.toml through Harbor Reward Kit, enabled only when OPENAI_API_KEY is set (REWARDKIT_JUDGE defaults to openai/gpt-5.6-sol; OpenAI judges only); without a key, with a non-OpenAI judge or when the judge call fails, the reward is compiled-only"
+tolerance_disclosure = "workload sizes and seeds are hidden from the agent by design; the instruction states every graded obligation and the reward formula"
+
+[agent]
+timeout_sec = 7200.0
+network_mode = "no-network"
+user = "1000:1000"
+
+[verifier]
+timeout_sec = 5400.0
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+environment_mode = "separate"
+# The harness demotes every run of submission code to a restricted uid with a fresh
+# HOME and TMPDIR and no write access to the harness or the measurement record.
+user = "root"
+
+# Optional judge: Harbor Reward Kit on the tester's own OpenAI API key. With OPENAI_API_KEY
+# unset the reward is the compiled score and the verifier calls nothing over the network.
+# The judge must be an OpenAI model (the tasks were authored with Claude); any other judge,
+# or a failed judge call, keeps the compiled reward.
+[verifier.env]
+REWARDKIT_JUDGE = "${REWARDKIT_JUDGE:-openai/gpt-5.6-sol}"
+OPENAI_API_KEY = "${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+LITELLM_LOCAL_MODEL_COST_MAP = "True"
+
+[verifier.environment]
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 8192
+storage_mb = 20480
+gpus = 0
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 6144
+storage_mb = 20480
+gpus = 0

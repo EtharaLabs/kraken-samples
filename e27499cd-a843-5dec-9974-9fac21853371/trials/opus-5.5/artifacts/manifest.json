@@ -1,0 +1,30 @@
+[
+  {
+    "source": "/logs/artifacts",
+    "destination": "artifacts/logs/artifacts",
+    "type": "directory",
+    "status": "ok",
+    "service": null,
+    "exclude": []
+  },
+  {
+    "source": "/app/scikit-learn",
+    "destination": "artifacts/app/scikit-learn",
+    "type": "directory",
+    "status": "ok",
+    "service": null,
+    "exclude": [
+      ".git",
+      "__pycache__",
+      "*.pyc",
+      "*.so",
+      ".pytest_cache",
+      ".hypothesis",
+      "build",
+      ".mesonpy-*",
+      "*.egg-info",
+      ".mypy_cache",
+      ".ruff_cache"
+    ]
+  }
+]

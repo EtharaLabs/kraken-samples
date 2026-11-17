@@ -1,0 +1,1 @@
+- [Dense CV alpha_ bit-exactness](cd-dense-cv-bit-exactness.md) — dense CD paths must stay bit-identical or LassoCV alpha_ flips on MSE plateaus

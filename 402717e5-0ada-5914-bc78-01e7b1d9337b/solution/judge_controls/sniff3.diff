@@ -1,0 +1,40 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -4067,6 +4067,17 @@
+         }
+         return pvalue, cvdict
+ 
++    def _lstsq_tvalue(self, endog, exog, col):
++        """t-statistic of one coefficient from a least-squares fit."""
++        nobs, k_exog = exog.shape
++        coef, _, rank, _ = np.linalg.lstsq(exog, endog, rcond=None)
++        if rank < k_exog:
++            return self._quick_ols(endog, exog)[col]
++        resid = endog - exog @ coef
++        sigma2 = resid @ resid / (nobs - k_exog)
++        row = np.linalg.pinv(exog)[col]
++        return coef[col] / np.sqrt(sigma2 * (row @ row))
++
+     def _quick_ols(self, endog, exog):
+         """
+         Minimal implementation of LS estimator for internal use
+@@ -4252,6 +4263,7 @@
+            Journal of Business & Economic Studies, 10: 251-270.
+         """
+         x = array_like(x, "x", dtype=np.double, ndim=1)
++        fresh = x.flags.c_contiguous and x.base is None
+         trim = float_like(trim, "trim")
+         maxlag = int_like(maxlag, "maxlag", optional=True)
+         regression = string_like(regression, "regression", options=("c", "t", "ct"))
+@@ -4313,7 +4325,10 @@
+                     )
+                 stats[bp] = o.tvalues[basecols - 1]
+             else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                if not fresh:
++                    stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                    continue
++                stats[bp] = self._lstsq_tvalue(endog[baselags:], exog, basecols - 1)
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

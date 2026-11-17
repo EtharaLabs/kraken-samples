@@ -1,0 +1,12 @@
+*
+!cirq-requirements.txt
+!rewardkit-requirements.txt
+!harness/
+!harness/**
+!expert/
+!expert/**
+**/__pycache__
+!score.py
+!judge_guard.py
+!test.sh
+!judge.toml

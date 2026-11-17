@@ -1,0 +1,143 @@
+{
+ "api": {
+  "changed": [],
+  "equal": true
+ },
+ "families": {
+  "F1": {
+   "cases": [
+    {
+     "equivalent": true,
+     "kind": "enet_path_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enetcv_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lasso_path_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enetcv_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enet_path_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lassocv_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enetcv_dense",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enet_path_dense",
+     "reason": null
+    }
+   ],
+   "patch_failures": []
+  },
+  "F2": {
+   "cases": [
+    {
+     "equivalent": true,
+     "kind": "mtenetcv_sparse",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtlassocv_sparse_noint_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtenetcv_sparse_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtenetcv_sparse_noint",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtlassocv_sparse_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtenetcv_sparse_noint_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtenetcv_sparse",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "mtlassocv_sparse_noint",
+     "reason": null
+    }
+   ],
+   "patch_failures": []
+  },
+  "F3": {
+   "cases": [
+    {
+     "equivalent": true,
+     "kind": "enetcv_sparse",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lassocv_sparse_noint_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enet_path_gram",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enetcv_sparse_noint",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lassocv_sparse_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "enetcv_sparse_noint_sw",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lassocv_sparse",
+     "reason": null
+    },
+    {
+     "equivalent": true,
+     "kind": "lassocv_sparse_noint",
+     "reason": null
+    }
+   ],
+   "patch_failures": []
+  }
+ }
+}

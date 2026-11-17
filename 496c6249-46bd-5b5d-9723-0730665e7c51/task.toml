@@ -1,0 +1,82 @@
+schema_version = "1.4"
+reward_type = "bounded_continuous"
+
+# D1: the modified numpy working tree. Harbor snapshots it out of the agent container and
+# re-materializes it at the same path in the separate verifier, which rebuilds it from source.
+artifacts = [
+  { source = "/app/numpy", exclude = [".git", "__pycache__", "*.pyc", ".pytest_cache", ".hypothesis", "build", ".mesonpy-*", "*.egg-info"] },
+]
+
+[task]
+name = "ethara/496c6249-46bd-5b5d-9723-0730665e7c51"
+version = "0.1.0"
+description = "Make np.isin and the set routines built on it fast for StringDType arrays, with and without a missing-value sentinel, without changing any result. Continuous reward: 0 on any failed gate (build, covering test, correctness instance, red line, or no class clearing the speed threshold); otherwise 0.9 x compiled score + 0.1 x judged score, the compiled score being two thirds per-class speed credit against a reference build and one third correctness, constraint and craft checks worth full credit when they hold."
+authors = [{ name = "ankit.ethara", email = "ankit.ethara@ethara.ai" }]
+keywords = ["python", "c", "numpy", "stringdtype", "isin", "performance-optimization", "continuous-reward"]
+
+[metadata]
+null_floor = 0.0
+discrimination_weight = 0.5
+platforms = ["linux/amd64", "linux/arm64"]
+archetype = "perf-optimization-fn"
+category = "performance-optimization"
+tags = ["optimization", "bounded-continuous"]
+
+[agent]
+timeout_sec = 7200.0
+network_mode = "no-network"
+user = "1000:1000"
+
+[verifier]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+environment_mode = "separate"
+# The harness compiles the submission as a builder uid and demotes every run of submission
+# code to a restricted runner uid with a fresh HOME and TMPDIR and no write access to the
+# harness or the measurement record, so it starts as root.
+user = "root"
+
+# Optional judge: Harbor Reward Kit on the tester's own OpenAI API key. With OPENAI_API_KEY
+# unset the reward is the compiled score and the verifier calls nothing over the network.
+# The judge must be an OpenAI model (the tasks were authored with Claude); any other judge,
+# or a failed judge call, keeps the compiled reward.
+[verifier.env]
+REWARDKIT_JUDGE = "${REWARDKIT_JUDGE:-openai/gpt-5.6-sol}"
+OPENAI_API_KEY = "${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+LITELLM_LOCAL_MODEL_COST_MAP = "True"
+
+[verifier.environment]
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+build_timeout_sec = 5400.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 30720
+gpus = 0
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 3600.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 20480
+gpus = 0
+
+[metadata.contamination]
+public_source = "https://github.com/numpy/numpy/pull/32693"
+public_since = "2026-09-24"
+note = "The upstream part of the reference fix is a public pull request (BSD-3-Clause, merged as 7643e77e8481c80472efb1c9d29de9898d765187). Models trained on data after 2026-09-24 may have seen it; treat scores from such models as possibly memorized."
+
+[metadata.task_spec]
+editable_surface = "/app/numpy/numpy/ (the numpy library package only; tests, benchmarks and test configuration are protected)"
+output_location = "the edited /app/numpy tree, snapshotted in place for the separate verifier, which overlays its library changes on the base source and rebuilds"
+output_schema = "results of np.isin, setdiff1d, intersect1d, union1d, setxor1d and unique identical to the base build's on every hidden instance"
+units = "wall-clock seconds of the first np.isin call in a fresh interpreter; minimum of 3 repetitions per build and instance"
+ordering = "base, base (calibration copy), reference and submission timed back to back in a rotating order per repetition"
+speed_floor = "per instance, T_base / T_patch must reach tau = max(2.0, spread^2), spread being the base-against-base ratio of the run, else the instance scores 0"
+full_credit = "per class, SR = the worst-case speedup over its two hidden sizes divided by the reference speedup at that size in the same run; class credit min(1, SR / 0.95) (SWE-fficiency speedup ratio, GSO OPT_0.95), 0 when the worst-case speedup is below tau"
+class_weights = "string and arbitrary-object sentinels 0.40 each; plain, None, nan and StringDType against fixed-width unicode 0.05 each"
+reward = "0 on a failed build, covering test, correctness instance or red line, or when no class clears tau; else 0.9 * C + 0.1 * J: C is the weighted mean of 19 compiled items, the six timed-class items (weights 12 for the string and arbitrary-object sentinel classes and 1.5 for each of the other four, 30 in all, two thirds of C) scoring their class credit and the thirteen correctness, constraint and craft items (one third of C) scoring 1.0 when they hold; J is the item-weighted mean of 12 binary judged items, median of 3 samples each. With no judge configured on the host (all four judge variables unset), the reward is C alone."
+tolerance_disclosure = "speed thresholds and hidden sizes are withheld from the agent by design, as in the reference benchmark (SWE-fficiency); the instruction states the obligation, not the thresholds"

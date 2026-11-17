@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+
+declare -r usage="\
+Usage: check/all [options] [BASE_REV]
+
+Runs multiple checks locally to approximate continuous integration test.
+Note that results may differ as continuous integration tests are run for
+more architectures and environments.
+
+Code formatting and test coverage are always checked only for files
+that changed with respect to the BASE_REV, which is by default the
+nearest ancestor in the upstream main branch.
+
+Options:
+
+  --changed, --only-changed-files   restrict pylint and pytest checks
+                to files that changed since the BASE_REV revision.
+
+  --fix         apply changes suggested by source code linters and formatters.
+
+  --apply-format-changes (deprecated)   apply code formatting suggestions.
+
+  -h, --help    display this message and exit.
+"
+
+die() {
+    ( shift; echo "$*" >&2 )
+    exit "$1"
+}
+
+# Get the working directory to the repo root -----------------------------------
+
+thisdir=$(dirname "${BASH_SOURCE[0]:?}")
+repo_dir=$(git -C "${thisdir}" rev-parse --show-toplevel)
+cd "${repo_dir}"
+
+# Parse arguments --------------------------------------------------------------
+
+declare only_changed=0
+declare -a extra_format_args=()
+declare -a extra_ruff_args=()
+declare -a base_rev=()
+
+for arg in "$@"; do
+    case "${arg}" in
+        -h|--help)
+            echo "${usage}"
+            exit 0
+            ;;
+        --changed|--only-changed-files)
+            only_changed=1
+            ;;
+        --fix)
+            extra_format_args=( --apply )
+            extra_ruff_args=( --fix )
+            ;;
+        --apply-format-changes)
+            echo "Warning: option '--apply-format-changes' is deprecated." \
+                "Please use '--fix' instead." >&2
+            echo "Warning: The '--apply-format-changes' will be removed in cirq v1.8." >&2
+            echo >&2
+            extra_format_args=( --apply )
+            ;;
+        -*)
+            die 2 "Invalid option '${arg}'.  See '$0 --help' for usage information."
+            ;;
+        *)
+            if (( "${#base_rev[@]}" )); then
+                die 2 "Too many arguments.  See '$0 --help' for usage information."
+            fi
+            if ! base_rev=( \
+                "$(git rev-parse --quiet --verify --end-of-options "${arg}^{commit}")" \
+            ); then
+                die 1 "Invalid git commit '${arg}'"
+            fi
+            ;;
+    esac
+done
+
+# Run the tests ----------------------------------------------------------------
+
+declare -a errors=()
+
+run() {
+    echo "[running] $*"
+    echo
+    "$@" || errors+=( "$* failed" )
+    echo
+}
+
+run check/misc
+run check/format-incremental "${base_rev[@]}" "${extra_format_args[@]}"
+run ruff check "${extra_ruff_args[@]}"
+
+if (( only_changed )); then
+    run check/pylint-changed-files "${base_rev[@]}"
+else
+    run check/pylint
+fi
+
+if (( only_changed )); then
+    run check/pytest-changed-files-and-incremental-coverage "${base_rev[@]}"
+else
+    run check/pytest-and-incremental-coverage "${base_rev[@]}"
+fi
+
+run check/typecheck
+
+# Make the only-changed mode fast.  Skip check/doctest which rarely fails,
+# but takes most run time in that mode.
+if (( only_changed == 0 )); then
+    run check/doctest
+fi
+
+# Summarize the results --------------------------------------------------------
+
+declare exit_code=0
+
+echo
+if (( "${#errors[@]}" )); then
+    printf "Some checks failed.\n\n"
+    printf "  %s\n" "${errors[@]}"
+    exit_code=1
+else
+    echo "All checks passed."
+fi
+
+exit "${exit_code}"

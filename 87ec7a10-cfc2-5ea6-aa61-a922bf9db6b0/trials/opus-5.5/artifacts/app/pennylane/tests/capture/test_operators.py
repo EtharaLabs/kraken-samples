@@ -1,0 +1,559 @@
+# Copyright 2024 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Integration tests for the capture of pennylane operations into jaxpr.
+"""
+
+# pylint: disable=protected-access,wrong-import-position
+
+import numpy as np
+import pytest
+
+import pennylane as qp
+
+jax = pytest.importorskip("jax")
+
+from pennylane.capture.primitives import AbstractOperator, operator_p
+from pennylane.tape.plxpr_conversion import CollectOpsandMeas
+from pennylane.testing import assert_eqn_matches_op
+
+pytestmark = [pytest.mark.jax, pytest.mark.capture]
+
+
+def test_abstract_operator():
+    """Perform unit tests on the abstract operator class."""
+
+    ao1 = AbstractOperator()
+    ao2 = AbstractOperator()
+    assert ao1 == ao2
+    assert hash(ao1) == hash(ao2)
+
+    with pytest.raises(NotImplementedError):
+        ao1.update()
+
+    with pytest.raises(NotImplementedError):
+        ao1.join(ao2)
+
+    with pytest.raises(NotImplementedError):
+        ao1.at_least_vspace()
+
+    # arithmetic dunders integration tested
+
+
+def test_operators_constructed_when_plxpr_enabled():
+    """Test that normal operators can still be constructed when plxpr is enabled."""
+
+    with qp.queuing.AnnotatedQueue() as q:
+        op = qp.adjoint(qp.X(0) + qp.Y(1))
+
+    assert len(q) == 1
+    assert q.queue[0] is op
+    assert isinstance(op, qp.ops.Adjoint)
+    assert isinstance(op.base, qp.ops.Sum)
+    assert op.base[0] == qp.X(0)
+    assert op.base[1] == qp.Y(1)
+
+
+def test_hybrid_capture_wires():
+    """That a hybrid quantum-classical jaxpr can be captured with wire processing."""
+
+    def f(a, b):
+        qp.X(a + b)
+
+    jaxpr = jax.make_jaxpr(f)(1, 2)
+    assert len(jaxpr.eqns) == 2
+
+    assert jaxpr.eqns[0].primitive.name == "add"
+
+    assert jaxpr.eqns[0].outvars == jaxpr.eqns[1].invars
+    assert_eqn_matches_op(jaxpr.eqns[1], qp.X)
+
+
+def test_hybrid_capture_parametrization():
+    """Test a variety of classical processing with a parametrized operation."""
+
+    def f(a):
+        qp.Rot(2 * a, jax.numpy.sqrt(a), a**2, wires=2 * a)
+
+    jaxpr = jax.make_jaxpr(f)(0.5)
+    assert len(jaxpr.eqns) == 5
+
+    in1 = jaxpr.jaxpr.invars[0]
+    assert jaxpr.eqns[0].invars[1] == in1
+    assert jaxpr.eqns[1].invars[0] == in1
+    assert jaxpr.eqns[2].invars[0] == in1
+    assert jaxpr.eqns[3].invars[-1] == in1  # the wire
+
+    assert jaxpr.eqns[0].primitive.name == "mul"
+    assert jaxpr.eqns[1].primitive.name == "sqrt"
+    assert jaxpr.eqns[2].primitive.name == "integer_pow"
+    assert jaxpr.eqns[3].primitive.name == "mul"
+    assert_eqn_matches_op(jaxpr.eqns[4], qp.Rot)
+
+
+@pytest.mark.parametrize("as_kwarg", (True, False))
+@pytest.mark.parametrize(
+    "w",
+    (
+        0,
+        (0,),
+        [0],
+        range(1),
+        qp.wires.Wires(0),
+        {0},
+        jax.numpy.array(0),
+        jax.numpy.array([0]),
+        np.array(0),
+        np.array([0]),
+    ),
+)
+@pytest.mark.parametrize("autograph", (True, False))
+def test_different_wires(w, as_kwarg, autograph):
+    """Test that wires can be passed positionally and as a keyword in a variety of different types."""
+
+    if as_kwarg:
+
+        def qfunc():
+            qp.X(wires=w)
+
+    else:
+
+        def qfunc():
+            qp.X(w)
+
+    if autograph:
+        qfunc = qp.capture.run_autograph(qfunc)
+
+    jaxpr = jax.make_jaxpr(qfunc)()
+    assert len(jaxpr.eqns) == 1
+    eqn = jaxpr.eqns[0]
+    assert_eqn_matches_op(eqn, qp.X)
+    assert len(eqn.invars) == 1
+    if not isinstance(w, jax.numpy.ndarray):
+        assert isinstance(eqn.invars[0], jax.extend.core.Literal)
+        assert eqn.invars[0].val == 0
+
+    assert isinstance(eqn.outvars[0].aval, AbstractOperator)
+    assert isinstance(eqn.outvars[0], jax.core.DropVar)
+
+    assert eqn.params["wire_lens"] == (1,)
+
+
+@pytest.mark.parametrize("as_kwarg", (True, False))
+@pytest.mark.parametrize("interface", ("numpy", "jax"))
+def test_ndarray_multiple_wires(as_kwarg, interface):
+    """Test that wires can be provided as an ndarray."""
+
+    def qfunc():
+        if as_kwarg:
+            qp.GroverOperator(wires=qp.math.arange(4, like=interface))
+        else:
+            qp.GroverOperator(qp.math.arange(4, like=interface))
+
+    jaxpr = jax.make_jaxpr(qfunc)()
+
+    assert jaxpr.eqns[-1].primitive == qp.GroverOperator._primitive
+    assert jaxpr.eqns[-1].params == {"n_wires": 4}
+    assert len(jaxpr.eqns[-1].invars) == 4
+
+    with qp.queuing.AnnotatedQueue() as q:
+        qp.capture.eval_jaxpr(jaxpr.jaxpr, jaxpr.consts)
+
+    assert len(q) == 1
+    qp.assert_equal(q.queue[0], qp.GroverOperator(wires=(0, 1, 2, 3)))
+
+
+def test_parametrized_op():
+    """Test capturing a parametrized operation."""
+
+    jaxpr = jax.make_jaxpr(qp.Rot)(1.0, 2.0, 3.0, 10)
+
+    assert len(jaxpr.eqns) == 1
+    eqn = jaxpr.eqns[0]
+
+    assert_eqn_matches_op(eqn, qp.Rot)
+    assert len(eqn.invars) == 4
+    assert jaxpr.jaxpr.invars == jaxpr.eqns[0].invars
+
+
+class TestSpecialOps:
+    def test_diagonal_qubit_unitary(self):
+        """Test Operator2 capture and list canonicalization for DiagonalQubitUnitary."""
+
+        def qfunc(D, wires):
+            qp.DiagonalQubitUnitary(D, wires)
+
+        D = [1.0, 1.0j, -1.0, -1.0j]
+        wires = [0, 1]
+        jaxpr = jax.make_jaxpr(qfunc)(D, wires)
+
+        eqn = jaxpr.eqns[-1]
+        assert_eqn_matches_op(eqn, qp.DiagonalQubitUnitary)
+        assert eqn.invars[0].aval == jax.core.ShapedArray((4,), complex)
+        assert eqn.invars[1:] == jaxpr.jaxpr.invars[-2:]
+        assert len(eqn.outvars) == 1
+        assert isinstance(eqn.outvars[0], jax.core.DropVar)
+
+    def test_pauli_rot(self):
+        """Test a special operation that has positional metadata and overrides binding."""
+
+        def qfunc(a, wire0, wire1):
+            qp.PauliRot(a, "XY", (wire0, wire1))
+
+        jaxpr = jax.make_jaxpr(qfunc)(0.5, 2, 3)
+        assert len(jaxpr.eqns) == 1
+        eqn = jaxpr.eqns[0]
+
+        assert eqn.primitive == operator_p
+        assert eqn.params["op_cls"] is qp.PauliRot
+        assert eqn.params["pauli_word"][0] == ("XY",)
+
+        assert len(eqn.invars) == 3  # The rotation parameter and the two wires
+        assert jaxpr.jaxpr.invars == eqn.invars
+
+        collector = CollectOpsandMeas()
+        collector.eval(jaxpr.jaxpr, jaxpr.consts, 2.5, 3, 4)
+
+        assert len(collector.state["ops"]) == 1
+        qp.assert_equal(collector.state["ops"][0], qp.PauliRot(2.5, "XY", (3, 4)))
+
+    def test_globalphase_with_no_wires_can_be_captured(self):
+        """Test that a global phase on no wires can be captured."""
+
+        def qfunc(phi):
+            return qp.GlobalPhase(phi)
+
+        jaxpr = jax.make_jaxpr(qfunc)(0.5)
+        assert len(jaxpr.eqns) == 1
+
+        gp_eqn = jaxpr.eqns[0]
+        assert_eqn_matches_op(gp_eqn, qp.GlobalPhase)
+        assert len(gp_eqn.invars) == 1
+        assert gp_eqn.params["wire_lens"] == ()
+
+        collector = CollectOpsandMeas()
+        collector.eval(jaxpr.jaxpr, jaxpr.consts, 1.2)
+
+        assert len(collector.state["ops"]) == 1
+        qp.assert_equal(collector.state["ops"][0], qp.GlobalPhase(1.2))
+
+    def test_identity_no_wires(self):
+        """Test that an identity on no wires can be captured."""
+
+        jaxpr = jax.make_jaxpr(qp.I)()
+        assert len(jaxpr.eqns) == 1
+
+        i_eqn = jaxpr.eqns[0]
+        assert_eqn_matches_op(i_eqn, qp.I)
+        assert len(i_eqn.invars) == 0
+        assert i_eqn.params["wire_lens"] == (0,)
+
+        collector = CollectOpsandMeas()
+        collector.eval(jaxpr.jaxpr, jaxpr.consts)
+
+        assert len(collector.state["ops"]) == 1
+        qp.assert_equal(collector.state["ops"][0], qp.I())
+
+    def test_identity_with_wires(self):
+        """Test that an identity on wires can be captured."""
+
+        def f(wires):
+            qp.I(wires)
+
+        jaxpr = jax.make_jaxpr(f)([0, 1])
+        assert len(jaxpr.eqns) == 1
+
+        i_eqn = jaxpr.eqns[0]
+        assert_eqn_matches_op(i_eqn, qp.I)
+        assert len(i_eqn.invars) == 2
+        assert i_eqn.params["wire_lens"] == (2,)
+
+
+class TestTemplates:
+    def test_variable_wire_non_parametrized_template(self):
+        """Test capturing a variable wire count, non-parametrized template like GroverOperator."""
+
+        jaxpr = jax.make_jaxpr(qp.GroverOperator)(wires=(0, 1, 2, 3, 4, 5))
+
+        assert len(jaxpr.eqns) == 1
+        eqn = jaxpr.eqns[0]
+
+        assert eqn.primitive == qp.GroverOperator._primitive
+        assert eqn.params == {"n_wires": 6}
+        assert eqn.invars == jaxpr.jaxpr.invars
+        assert isinstance(eqn.outvars[0].aval, AbstractOperator)
+
+    def test_nested_template(self):
+        """Test capturing a template that depends on another operator."""
+
+        def qfunc(coeffs):
+            ops = [qp.X(0), qp.Z(0)]
+            H = qp.dot(coeffs, ops)
+            qp.TrotterProduct(H, time=2.4, order=2)
+
+        coeffs = [0.25, 0.75]
+
+        jaxpr = jax.make_jaxpr(qfunc)(coeffs)
+
+        assert len(jaxpr.eqns) == 6
+
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.X)
+        assert_eqn_matches_op(jaxpr.eqns[1], qp.Z)
+        assert jaxpr.eqns[2].primitive == qp.ops.SProd._primitive
+        assert jaxpr.eqns[3].primitive == qp.ops.SProd._primitive
+        assert jaxpr.eqns[4].primitive == qp.ops.Sum._primitive
+        assert not any(isinstance(eqn.outvars[0], jax.core.DropVar) for eqn in jaxpr.eqns[:5])
+
+        eqn = jaxpr.eqns[5]
+        assert eqn.primitive == qp.TrotterProduct._primitive
+        assert eqn.invars == jaxpr.eqns[4].outvars  # the sum op
+
+        assert eqn.params == {"order": 2, "time": 2.4}
+
+        with qp.queuing.AnnotatedQueue() as q:
+            jax.core.eval_jaxpr(jaxpr.jaxpr, jaxpr.consts, coeffs[0], coeffs[1])
+
+        assert len(q) == 1
+        ops = [qp.X(0), qp.Z(0)]
+        H = qp.dot(coeffs, ops)
+        assert q.queue[0] == qp.TrotterProduct(H, time=2.4, order=2)
+
+    @pytest.mark.parametrize("input_type", [tuple, list])
+    def test_state_prep_tuple_list_capture(self, input_type):
+        """Tests that tuple or list types for 'state' can be used."""
+
+        state = input_type([1, 0, 0, 0])
+        jaxpr = jax.make_jaxpr(qp.StatePrep)(state, wires=[0, 1])
+        assert jaxpr.eqns[9].primitive == qp.StatePrep._primitive
+        assert jaxpr.eqns[9].invars[0].aval == jax.core.ShapedArray((4,), int)
+
+        state = input_type([1.0, 0.0, 0.0, 0.0])
+        jaxpr = jax.make_jaxpr(qp.StatePrep)(state, wires=[0, 1])
+        assert jaxpr.eqns[9].primitive == qp.StatePrep._primitive
+        assert jaxpr.eqns[9].invars[0].aval == jax.core.ShapedArray((4,), float)
+
+    @pytest.mark.parametrize("input_type", [tuple, list])
+    def test_basis_state_tuple_list_capture(self, input_type):
+        """Tests that tuple or list types for 'state' can be used."""
+
+        state = input_type([1, 0])
+        jaxpr = jax.make_jaxpr(qp.BasisState)(state, wires=[0, 1])
+        assert_eqn_matches_op(jaxpr.eqns[4], qp.BasisState)
+        assert jaxpr.eqns[4].invars[0].aval == jax.core.ShapedArray((2,), bool)
+
+        state = input_type([1.0, 0.0])
+        jaxpr = jax.make_jaxpr(qp.BasisState)(state, wires=[0, 1])
+        assert_eqn_matches_op(jaxpr.eqns[4], qp.BasisState)
+        assert jaxpr.eqns[4].invars[0].aval == jax.core.ShapedArray((2,), bool)
+
+
+class TestOpmath:
+    """Tests for capturing operator arithmetic."""
+
+    def test_adjoint(self):
+        """Test the adjoint on an op can be captured."""
+
+        jaxpr = jax.make_jaxpr(qp.adjoint)(qp.X(0))
+
+        assert len(jaxpr.eqns) == 1
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.X)
+        assert jaxpr.eqns[0].params["adjoint"] is True
+
+    def test_adjoint_op_outside_qfunc(self):
+        """Test that an op can be constructed outside a function and still be adjointed."""
+
+        op = qp.X(0)
+
+        def f():
+            qp.adjoint(op)
+
+        jaxpr = jax.make_jaxpr(f)()
+
+        assert len(jaxpr.eqns) == 1
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.X)
+        assert jaxpr.eqns[0].params["adjoint"] is True
+
+    def test_controlled_with_non_int_control_wires(self):
+        """Tests that controlled works with non int control wires."""
+
+        def qfunc(control_wire):
+            qp.ctrl(qp.Y(0), control=control_wire)
+
+        cjaxpr = jax.make_jaxpr(qfunc)(jax.numpy.array([1, 2, 3]))
+
+        base_eqn = cjaxpr.eqns[-1]
+        assert_eqn_matches_op(base_eqn, qp.Y)
+        assert base_eqn.params["n_ctrls"] == 3
+
+    def test_Controlled(self):
+        """Test a nested control operation with the base operator passed as an argument."""
+
+        def qfunc(op):
+            qp.ctrl(op, control=(3, 4), control_values=[0, 1])
+
+        jaxpr = jax.make_jaxpr(qfunc)(qp.IsingXX(1.2, wires=(0, 1)))
+
+        # The controlled operator is captured as a single operator primitive with control metadata.
+        assert len(jaxpr.eqns) == 1
+        eqn = jaxpr.eqns[0]
+        assert_eqn_matches_op(eqn, qp.IsingXX)
+        assert eqn.params["wire_lens"] == (2,)
+        assert eqn.params["n_ctrls"] == 2
+
+        # The parameter and wires of the base operator are the inputs of the jaxpr.
+        collector = CollectOpsandMeas()
+        collector.eval(jaxpr.jaxpr, jaxpr.consts, 3.4, 0, 1)
+        assert len(collector.state["ops"]) == 1
+        expected = qp.ctrl(qp.IsingXX(3.4, wires=(0, 1)), control=(3, 4), control_values=[0, 1])
+        qp.assert_equal(collector.state["ops"][0], expected)
+
+    def test_operator_of_operators_as_argument(self):
+        """Test that capturing a function whose argument is an operator of operators
+        works correctly.
+        """
+        op = qp.prod(qp.X(0), qp.X(1))
+
+        empty_jaxpr = jax.make_jaxpr(lambda _op: None)(op)
+        assert len(empty_jaxpr.eqns) == 0
+        # The two nested operators contribute their wires as inputs of the jaxpr.
+        assert len(empty_jaxpr.jaxpr.invars) == 2
+
+        # When applied, the composite operator is re-created and can be reconstructed exactly.
+        def f(operator):
+            qp.apply(operator)
+
+        jaxpr = jax.make_jaxpr(f)(op)
+        assert len(jaxpr.eqns) == 1
+        assert jaxpr.eqns[0].primitive == operator_p
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.ops.Prod2)
+
+        collector = CollectOpsandMeas()
+        collector.eval(jaxpr.jaxpr, jaxpr.consts, 0, 1)
+        assert len(collector.state["ops"]) == 1
+        qp.assert_equal(collector.state["ops"][0], op)
+
+    def test_ctrl_op_constructed_outside_qfunc(self):
+        """Test an op constructed outside the qfunc can be controlled."""
+
+        op = qp.IsingXX(1.2, wires=(0, 1))
+
+        def f():
+            qp.ctrl(op, control=(3, 4), control_values=[0, 1])
+
+        jaxpr = jax.make_jaxpr(f)()
+        assert len(jaxpr.eqns) == 1
+        eqn = jaxpr.eqns[0]
+
+        assert_eqn_matches_op(eqn, qp.IsingXX)
+
+        assert eqn.params["wire_lens"] == (2,)
+        assert eqn.params["n_ctrls"] == 2
+
+        for var in eqn.invars:
+            assert isinstance(var, jax.extend.core.Literal)
+        assert eqn.invars[0].val == 1.2  # isingxx parameter
+        assert eqn.invars[1].val == 0  # isingxx wires
+        assert eqn.invars[2].val == 1
+        assert eqn.invars[3].val == 3  # control wires
+        assert eqn.invars[4].val == 4
+        assert eqn.invars[5].val == np.False_  # control values
+        assert eqn.invars[6].val == np.True_
+
+        assert isinstance(eqn.outvars[0].aval, AbstractOperator)
+
+
+class TestAbstractDunders:
+    """Test that operator dunders work when capturing."""
+
+    def test_add(self):
+        """Test that the add dunder works."""
+
+        def qfunc():
+            return qp.X(0) + qp.Y(1)
+
+        jaxpr = jax.make_jaxpr(qfunc)()
+
+        assert len(jaxpr.eqns) == 3
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.X)
+        assert_eqn_matches_op(jaxpr.eqns[1], qp.Y)
+
+        eqn = jaxpr.eqns[2]
+
+        assert eqn.primitive == qp.ops.Sum._primitive
+        assert eqn.invars[0] == jaxpr.eqns[0].outvars[0]
+        assert eqn.invars[1] == jaxpr.eqns[1].outvars[0]
+
+        assert eqn.params == {"grouping_type": None, "method": "lf"}
+
+        assert isinstance(eqn.outvars[0].aval, AbstractOperator)
+
+    def test_matmul(self):
+        """Test that the matmul dunder works."""
+
+        def qfunc():
+            return qp.X(0) @ qp.Y(1)
+
+        jaxpr = jax.make_jaxpr(qfunc)()
+
+        assert len(jaxpr.eqns) == 1
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.ops.Prod2)
+        assert len(jaxpr.eqns[0].params["hybrid_trees"]) == 2
+        assert "PauliX" in str(jaxpr.eqns[0].params["hybrid_trees"][0])
+        assert "PauliY" in str(jaxpr.eqns[0].params["hybrid_trees"][0])
+
+    def test_mul(self):
+        """Test that the scalar multiplication dunder works."""
+
+        def qfunc():
+            return 2 * qp.Y(1) * 3
+
+        jaxpr = jax.make_jaxpr(qfunc)()
+        assert len(jaxpr.eqns) == 3
+
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.Y)
+
+        assert jaxpr.eqns[1].primitive == qp.ops.SProd._primitive
+        assert jaxpr.eqns[1].invars[0].val == 2
+        assert jaxpr.eqns[1].invars[1] == jaxpr.eqns[0].outvars[0]  # the y from the previous step
+
+        assert jaxpr.eqns[2].primitive == qp.ops.SProd._primitive
+        assert jaxpr.eqns[2].invars[0].val == 3
+        assert (
+            jaxpr.eqns[2].invars[1] == jaxpr.eqns[1].outvars[0]
+        )  # the sprod from the previous step
+
+        with qp.queuing.AnnotatedQueue() as q:
+            jax.core.eval_jaxpr(jaxpr.jaxpr, jaxpr.consts)
+
+        assert len(q) == 1
+        assert q.queue[0] == 3 * 2 * qp.Y(1)
+
+    def test_pow(self):
+        """Test that abstract operators can be raised to powers."""
+
+        def qfunc(z):
+            return qp.IsingZZ(z, (0, 1)) ** 2
+
+        jaxpr = jax.make_jaxpr(qfunc)(1.2)
+
+        assert len(jaxpr.eqns) == 1
+
+        assert_eqn_matches_op(jaxpr.eqns[0], qp.ops.op_math.pow2.Pow2)
+        assert jaxpr.eqns[0].params["z"][0] == (2,)
+
+        assert len(jaxpr.eqns[0].params["hybrid_trees"]) == 1
+        assert (
+            jaxpr.eqns[0].params["hybrid_trees"][0].type_
+            == qp.ops.qubit.parametric_ops_multi_qubit.IsingZZ
+        )

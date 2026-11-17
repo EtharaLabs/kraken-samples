@@ -1,0 +1,1156 @@
+"""
+Rolling OLS and WLS
+
+Implements an efficient rolling estimator that avoids repeated matrix
+multiplication.
+
+Copyright (c) 2019 Kevin Sheppard
+License: 3-clause BSD
+"""
+from statsmodels.compat.pandas import (
+    cache_readonly,
+    call_cached_func,
+    get_cached_doc,
+)
+
+from typing import NamedTuple
+
+import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
+from pandas import DataFrame, MultiIndex, Series
+from scipy import stats
+
+from statsmodels.base import model
+from statsmodels.base.model import LikelihoodModelResults, Model
+from statsmodels.formula._manager import FormulaManager
+from statsmodels.regression.linear_model import (
+    RegressionModel,
+    RegressionResults,
+)
+from statsmodels.tools.docstring_helpers import Appender, Substitution
+from statsmodels.tools.validation import (
+    array_like,
+    bool_like,
+    int_like,
+    string_like,
+)
+
+# Target number of float64 values in each work array of the batched fit.
+# Windows are processed in groups so that memory use does not grow with nobs.
+_BATCH_SIZE = 2**18
+
+
+def _batched_inverse(a):
+    """
+    Inverse of a stack of square matrices
+
+    Returns the inverses and a flag that is False for singular matrices,
+    whose inverse is set to nan.
+    """
+    try:
+        return np.linalg.inv(a), np.ones(a.shape[0], dtype=bool)
+    except np.linalg.LinAlgError:
+        ainv = np.full_like(a, np.nan)
+        ok = np.zeros(a.shape[0], dtype=bool)
+        for i in range(a.shape[0]):
+            try:
+                ainv[i] = np.linalg.inv(a[i])
+                ok[i] = True
+            except np.linalg.LinAlgError:
+                # Singular window: its inverse stays nan and ok[i] False
+                pass
+        return ainv, ok
+
+
+def strip4(line):
+    if line.startswith(" "):
+        return line[4:]
+    return line
+
+
+class RollingStore(NamedTuple):
+    params: np.ndarray
+    ssr: np.ndarray
+    llf: np.ndarray
+    nobs: np.ndarray
+    s2: np.ndarray
+    xpxi: np.ndarray
+    xeex: np.ndarray
+    centered_tss: np.ndarray
+    uncentered_tss: np.ndarray
+
+
+common_params = "\n".join(map(strip4, model._model_params_doc.split("\n")))
+window_parameters = """\
+window : {int, None}, optional
+    Length of the rolling window. Must be strictly larger than the number
+    of variables in the model. If None, the entire sample is used.
+"""
+
+weight_parameters = """
+weights : array_like, optional
+    A 1d array of weights.  If you supply 1/W then the variables are
+    pre-multiplied by 1/sqrt(W).  If no weights are supplied the
+    default value is 1 and WLS results are the same as OLS.
+"""
+
+_missing_param_doc = """\
+min_nobs : {int, None}, optional
+    Minimum number of observations required to estimate a model when
+    data are missing.  If None, the minimum depends on the number of
+    regressors in the model. Must be smaller than window.
+missing : str, default "drop"
+    Available options are "drop", "skip" and "raise". If "drop", any
+    observations with nans are dropped and the estimates are computed using
+    only the non-missing values in each window. If 'skip' blocks containing
+    missing values are skipped and the corresponding results contain NaN.
+    If 'raise', an error is raised. Default is 'drop'.
+expanding : bool, default False
+    If True, then the initial observations after min_nobs are filled using
+    an expanding scheme until ``window`` observations are available, after
+    which rolling is used.
+"""
+
+
+extra_base = _missing_param_doc
+extra_parameters = window_parameters + weight_parameters + extra_base
+
+_doc = """
+Rolling %(model_type)s Least Squares
+
+%(parameters)s
+%(extra_parameters)s
+
+See Also
+--------
+statsmodels.regression.linear_model.%(model)s
+    %(model)s estimation and parameter testing.
+
+Notes
+-----
+Tested against %(model)s for accuracy.
+
+Results may differ from %(model)s applied to windows of data if this
+model contains an implicit constant (i.e., includes dummies for all
+categories) rather than an explicit constant (e.g., a column of 1s).
+
+Examples
+--------
+>>> from statsmodels.regression.rolling import Rolling%(model)s
+>>> from statsmodels.tools.tools import add_constant
+>>> from statsmodels.datasets import longley
+>>> data = longley.load()
+>>> exog = add_constant(data.exog, prepend=False)
+>>> mod = Rolling%(model)s(data.endog, exog)
+>>> rolling_res = mod.fit(reset=50)
+
+Use params_only to skip all calculations except parameter estimation
+
+>>> rolling_params = mod.fit(params_only=True)
+
+Use expanding and min_nobs to fill the initial results using an
+expanding scheme until window observations are available, after which
+rolling is used.
+
+>>> mod = Rolling%(model)s(data.endog, exog, window=60, min_nobs=12,
+... expanding=True)
+>>> rolling_res = mod.fit()
+"""
+
+
+@Substitution(
+    model_type="Weighted",
+    model="WLS",
+    parameters=common_params,
+    extra_parameters=extra_parameters,
+)
+@Appender(_doc)
+class RollingWLS:
+    def __init__(
+        self,
+        endog,
+        exog,
+        window=None,
+        *,
+        weights=None,
+        min_nobs=None,
+        missing="drop",
+        expanding=False
+    ):
+        # Call Model.__init__ twice to use const detection in first pass
+        # But to not drop in the second pass
+        missing = string_like(
+            missing, "missing", options=("drop", "raise", "skip")
+        )
+        temp_msng = "drop" if missing != "raise" else "raise"
+        Model.__init__(self, endog, exog, missing=temp_msng, hasconst=None)
+        k_const = self.k_constant
+        const_idx = self.data.const_idx
+        Model.__init__(self, endog, exog, missing="none", hasconst=False)
+        self.k_constant = k_const
+        self.data.const_idx = const_idx
+        self._y = array_like(endog, "endog", ndim=1)
+        nobs = self._y.shape[0]
+        self._x = array_like(exog, "endog", ndim=2, shape=(nobs, None))
+        window = int_like(window, "window", optional=True)
+        weights = array_like(weights, "weights", optional=True, shape=(nobs,))
+        self._window = window if window is not None else self._y.shape[0]
+        self._weighted = weights is not None
+        self._weights = np.ones(nobs) if weights is None else weights
+        w12 = np.sqrt(self._weights)
+        self._wy = w12 * self._y
+        self._wx = w12[:, None] * self._x
+
+        min_nobs = int_like(min_nobs, "min_nobs", optional=True)
+        self._min_nobs = min_nobs if min_nobs is not None else self._x.shape[1]
+        if self._min_nobs < self._x.shape[1] or self._min_nobs > self._window:
+            raise ValueError(
+                "min_nobs must be larger than the number of "
+                "regressors in the model and less than window"
+            )
+
+        self._expanding = expanding
+        if not expanding and self._window > nobs:
+            raise ValueError(
+                "window must be less than or equal to the number of "
+                "observations when expanding is False"
+            )
+
+        self._is_nan = np.zeros_like(self._y, dtype=bool)
+        self._has_nan = self._find_nans()
+        self.const_idx = self.data.const_idx
+        self._skip_missing = missing == "skip"
+
+    def _handle_data(self, endog, exog, missing, hasconst, **kwargs):
+        return Model._handle_data(
+            self, endog, exog, missing, hasconst, **kwargs
+        )
+
+    def _find_nans(self):
+        nans = np.isnan(self._y)
+        nans |= np.any(np.isnan(self._x), axis=1)
+        nans |= np.isnan(self._weights)
+        self._is_nan[:] = nans
+        has_nan = np.cumsum(nans)
+        w = self._window
+        # Number of missing values in the window ending at each observation
+        has_nan[w:] = has_nan[w:] - has_nan[:-w]
+        if self._expanding:
+            has_nan[: self._min_nobs] = False
+        else:
+            has_nan[: w - 1] = False
+
+        return has_nan.astype(bool)
+
+    def _get_data(self, idx):
+        window = self._window
+        if idx >= window:
+            loc = slice(idx - window, idx)
+        else:
+            loc = slice(idx)
+        y = self._y[loc]
+        wy = self._wy[loc]
+        wx = self._wx[loc]
+        weights = self._weights[loc]
+        missing = self._is_nan[loc]
+        not_missing = ~missing
+        if np.any(missing):
+            y = y[not_missing]
+            wy = wy[not_missing]
+            wx = wx[not_missing]
+            weights = weights[not_missing]
+        return y, wy, wx, weights, not_missing
+
+    def _fit_single(
+        self, idx, wxpwx, wxpwy, nobs, store, params_only, method, robust=True
+    ):
+        if nobs < self._min_nobs:
+            return
+        try:
+            if (method == "inv") or not params_only:
+                wxpwxi = np.linalg.inv(wxpwx)
+            if method == "inv":
+                params = wxpwxi @ wxpwy
+            else:
+                _, wy, wx, _, _ = self._get_data(idx)
+                if method == "lstsq":
+                    params = np.linalg.lstsq(wx, wy)[0]
+                else:  # 'pinv'
+                    wxpwxiwxp = np.linalg.pinv(wx)
+                    params = wxpwxiwxp @ wy
+
+        except np.linalg.LinAlgError:
+            return
+        store.params[idx - 1] = params
+        if params_only:
+            return
+        y, wy, wx, weights, _ = self._get_data(idx)
+
+        wresid, ssr, llf = self._loglike(params, wy, wx, weights, nobs)
+        if robust:
+            wxwresid = wx * wresid[:, None]
+            store.xeex[idx - 1] = wxwresid.T @ wxwresid
+        tot_params = wx.shape[1]
+        s2 = ssr / (nobs - tot_params)
+
+        centered_tss, uncentered_tss = self._sum_of_squares(y, wy, weights)
+
+        store.ssr[idx - 1] = ssr
+        store.llf[idx - 1] = llf
+        store.nobs[idx - 1] = nobs
+        store.s2[idx - 1] = s2
+        store.xpxi[idx - 1] = wxpwxi
+        store.centered_tss[idx - 1] = centered_tss
+        store.uncentered_tss[idx - 1] = uncentered_tss
+
+    def _loglike(self, params, wy, wx, weights, nobs):
+        nobs2 = nobs / 2.0
+        wresid = wy - wx @ params
+        ssr = np.sum(wresid ** 2, axis=0)
+        llf = -np.log(ssr) * nobs2  # concentrated likelihood
+        llf -= (1 + np.log(np.pi / nobs2)) * nobs2  # with constant
+        llf += 0.5 * np.sum(np.log(weights))
+        return wresid, ssr, llf
+
+    def _sum_of_squares(self, y, wy, weights):
+        mean = np.average(y, weights=weights)
+        centered_tss = np.sum(weights * (y - mean) ** 2)
+        uncentered_tss = np.dot(wy, wy)
+        return centered_tss, uncentered_tss
+
+    def _reset(self, idx):
+        """Compute xpx and xpy using a single dot product"""
+        _, wy, wx, _, not_missing = self._get_data(idx)
+        nobs = not_missing.sum()
+        xpx = wx.T @ wx
+        xpy = wx.T @ wy
+        return xpx, xpy, nobs
+
+    def _batched_data(self):
+        """
+        Zero-filled data used by the batched fit
+
+        Returns
+        -------
+        z : ndarray
+            Array with columns [wx, wy] and window - 1 rows of zeros prepended
+            so that every window has ``window`` rows. Missing observations are
+            set to 0 so that they do not contribute to any window.
+        nobs : ndarray
+            Number of non-missing observations in the window ending at each
+            observation.
+        """
+        nobs, k = self._x.shape
+        pad = self._window - 1
+        valid = ~self._is_nan
+        z = np.zeros((pad + nobs, k + 1))
+        z[pad:, :k] = np.where(valid[:, None], self._wx, 0.0)
+        z[pad:, k] = np.where(valid, self._wy, 0.0)
+        count = np.zeros(pad + nobs + 1, dtype=int)
+        np.cumsum(valid, out=count[pad + 1 :])
+        return z, count[self._window :] - count[:nobs]
+
+    def _batched_inv(self, z, wins, reset, params_only, store):
+        """
+        Batched estimation using window inner products and matrix inversion
+
+        Window inner products are updated by adding and removing one
+        observation at a time, and are recomputed directly from the window's
+        data at least once every min(reset, window) windows, so that rounding
+        errors cannot accumulate beyond one window. Returns the windows that
+        were estimated.
+        """
+        k = z.shape[1] - 1
+        w = self._window
+        zv = sliding_window_view(z, w, axis=0)
+        n_direct = max(1, _BATCH_SIZE // ((k + 1) * w))
+        size = max(1, _BATCH_SIZE // (k + 1) ** 2)
+        block = min(reset, w)
+        if block > size:
+            # Recompute at the start of some batches and carry the inner
+            # products across the others
+            block = size * (block // size)
+        else:
+            size = block * (size // block)
+        lo, hi = wins[0], wins[-1] + 1
+        fitted = []
+        zpz = None
+        for start in range(lo, hi, size):
+            stop = min(start + size, hi)
+            restart = (start - lo) % block == 0
+            # Moving from window i - 1 to window i adds row i + w - 1 of z
+            # and removes row i - 1
+            d0 = int(restart)
+            add = z[start + w - 1 + d0 : stop + w - 1]
+            rem = z[start - 1 + d0 : stop - 1]
+            last = None if zpz is None else zpz[-1]
+            zpz = np.empty((stop - start, k + 1, k + 1))
+            zpz[d0:] = (
+                add[:, :, None] * add[:, None, :] - rem[:, :, None] * rem[:, None, :]
+            )
+            if restart:
+                loc = np.arange(0, stop - start, block)
+                for j in range(0, loc.shape[0], n_direct):
+                    zb = zv[start + loc[j : j + n_direct]]
+                    zpz[loc[j : j + n_direct]] = zb @ zb.transpose(0, 2, 1)
+            else:
+                # Continue from the last window of the previous batch
+                zpz[0] += last
+            n_full = (stop - start) // block
+            head = zpz[: n_full * block].reshape(n_full, block, k + 1, k + 1)
+            np.cumsum(head, axis=1, out=head)
+            np.cumsum(zpz[n_full * block :], axis=0, out=zpz[n_full * block :])
+            sel = wins[slice(*np.searchsorted(wins, [start, stop]))]
+            xpx = zpz[sel - start, :k, :k]
+            xpy = zpz[sel - start, :k, k:]
+            xpxi, ok = _batched_inverse(xpx)
+            sel = sel[ok]
+            store.params[sel] = (xpxi[ok] @ xpy[ok])[..., 0]
+            if not params_only:
+                store.xpxi[sel] = xpxi[ok]
+            fitted.append(sel)
+        return np.concatenate(fitted)
+
+    def _batched_lstsq(self, z, wins, nobs, method, params_only, robust, store):
+        """
+        Batched estimation using the QR decomposition of each window
+
+        Each window is decomposed as [wx, wy] = QR using Householder
+        reflections, the method used by least squares solvers. Windows whose
+        condition number is within a factor of 2 of the point where lstsq or
+        pinv would truncate singular values are estimated one at a time using
+        _fit_single, so that they are handled exactly as before. Returns the windows that were estimated in batches.
+        """
+        k = z.shape[1] - 1
+        w = self._window
+        zv = sliding_window_view(z, w, axis=0)
+        size = max(1, _BATCH_SIZE // ((k + 1) * w))
+        # Relative singular value cutoffs used by lstsq and pinv
+        if method == "lstsq":
+            rcond = np.finfo(np.double).eps * np.maximum(nobs, k)
+        else:
+            rcond = np.full(nobs.shape, 1e-15)
+        fitted = []
+        single = []
+        for start in range(0, wins.shape[0], size):
+            sel = wins[start : start + size]
+            r = np.linalg.qr(zv[sel].transpose(0, 2, 1), mode="r")
+            rx = r[:, :k, :k]
+            rxi, ok = _batched_inverse(rx)
+            # Frobenius-norm condition number, an upper bound for the 2-norm
+            # condition number that lstsq and pinv compare with 1 / rcond
+            with np.errstate(over="ignore", invalid="ignore"):
+                cond = np.sqrt(np.sum(rx**2, axis=(1, 2)))
+                cond *= np.sqrt(np.sum(rxi**2, axis=(1, 2)))
+                ok &= cond * rcond[sel] < 0.5
+            single.append(sel[~ok])
+            sel = sel[ok]
+            rxi = rxi[ok]
+            store.params[sel] = (rxi @ r[ok, :k, k:])[..., 0]
+            if not params_only:
+                store.xpxi[sel] = rxi @ rxi.transpose(0, 2, 1)
+            fitted.append(sel)
+        for i in np.concatenate(single):
+            xpx, xpy, n = self._reset(i + 1)
+            self._fit_single(i + 1, xpx, xpy, n, store, params_only, method, robust)
+        return np.concatenate(fitted)
+
+    def _batched_statistics(self, z, wins, nobs, robust, store):
+        """Residual-based statistics for the windows in wins"""
+        k = z.shape[1] - 1
+        w = self._window
+        # y, weights and log(weights), padded and zero-filled like z
+        pad = w - 1
+        valid = ~self._is_nan
+        aux = np.zeros((pad + self._x.shape[0], 3))
+        aux[pad:, 0] = np.where(valid, self._y, 0.0)
+        aux[pad:, 1] = np.where(valid, self._weights, 0.0)
+        aux[pad:][valid, 2] = np.log(self._weights[valid])
+        zv = sliding_window_view(z, w, axis=0)
+        av = sliding_window_view(aux, w, axis=0)
+        size = max(1, _BATCH_SIZE // ((k + 1) * w))
+        for start in range(0, wins.shape[0], size):
+            sel = wins[start : start + size]
+            zw = zv[sel]
+            wx = zw[:, :k]
+            wy = zw[:, k]
+            y, weights, log_weights = av[sel].transpose(1, 0, 2)
+            wresid = wy - (store.params[sel, None, :] @ wx)[:, 0]
+            ssr = np.sum(wresid**2, axis=1)
+            n = nobs[sel]
+            nobs2 = n / 2.0
+            llf = -np.log(ssr) * nobs2  # concentrated likelihood
+            llf -= (1 + np.log(np.pi / nobs2)) * nobs2  # with constant
+            llf += 0.5 * np.sum(log_weights, axis=1)
+            mean = np.sum(weights * y, axis=1) / np.sum(weights, axis=1)
+            centered_tss = np.sum(weights * (y - mean[:, None]) ** 2, axis=1)
+            store.ssr[sel] = ssr
+            store.llf[sel] = llf
+            store.nobs[sel] = n
+            store.s2[sel] = ssr / (n - k)
+            store.centered_tss[sel] = centered_tss
+            store.uncentered_tss[sel] = np.sum(wy**2, axis=1)
+            if robust:
+                wxwresid = wx * wresid[:, None, :]
+                store.xeex[sel] = wxwresid @ wxwresid.transpose(0, 2, 1)
+
+    def _fit_batched(self, first, method, reset, params_only, robust, store):
+        """Estimate all windows using batched linear algebra"""
+        z, nobs = self._batched_data()
+        wins = np.arange(first - 1, self._x.shape[0])
+        keep = nobs[wins] >= self._min_nobs
+        if self._skip_missing:
+            keep &= ~self._has_nan[wins]
+        wins = wins[keep]
+        if wins.shape[0] == 0:
+            return
+        if method == "inv":
+            fitted = self._batched_inv(z, wins, reset, params_only, store)
+        else:
+            fitted = self._batched_lstsq(
+                z, wins, nobs, method, params_only, robust, store
+            )
+        if not params_only:
+            self._batched_statistics(z, fitted, nobs, robust, store)
+
+    def _fit_loop(self, first, method, reset, params_only, robust, store):
+        """Estimate one window at a time using rank-one updates"""
+        w = self._window
+        xpx, xpy, nobs = self._reset(first)
+        if not (self._has_nan[first - 1] and self._skip_missing):
+            self._fit_single(first, xpx, xpy, nobs, store, params_only, method, robust)
+        wx, wy = self._wx, self._wy
+        skipped = False
+        for i in range(first + 1, self._x.shape[0] + 1):
+            if self._has_nan[i - 1] and self._skip_missing:
+                skipped = True
+                continue
+            if i % reset == 0 or skipped:
+                # Recompute after skipped windows since xpx and xpy were not
+                # updated while skipping
+                xpx, xpy, nobs = self._reset(i)
+                skipped = False
+            else:
+                if i > w and not self._is_nan[i - w - 1]:
+                    remove_x = wx[i - w - 1 : i - w]
+                    xpx -= remove_x.T @ remove_x
+                    xpy -= remove_x.T @ wy[i - w - 1 : i - w]
+                    nobs -= 1
+                if not self._is_nan[i - 1]:
+                    add_x = wx[i - 1 : i]
+                    xpx += add_x.T @ add_x
+                    xpy += add_x.T @ wy[i - 1 : i]
+                    nobs += 1
+
+            self._fit_single(i, xpx, xpy, nobs, store, params_only, method, robust)
+
+    def _use_batched(self, first, method):
+        """Flag indicating whether the batched fit can be used"""
+        nobs, k = self._x.shape
+        # Leave a window longer than the sample to the loop, and require a
+        # window with more rows than columns in [wx, wy] for the QR
+        return first <= nobs and (method == "inv" or self._window > k)
+
+    def fit(
+        self,
+        method="inv",
+        cov_type="nonrobust",
+        cov_kwds=None,
+        reset=None,
+        use_t=False,
+        params_only=False,
+    ):
+        """
+        Estimate model parameters
+
+        Parameters
+        ----------
+        method : {'inv', 'lstsq', 'pinv'}, optional
+            Method to use when computing the model parameters.
+
+            * 'inv' - use moving windows inner-products and matrix inversion.
+              This method is the fastest, but may be less accurate than the
+              other methods.
+            * 'lstsq' - Use the QR decomposition of each window, computed in
+              batches, which has the same accuracy as numpy.linalg.lstsq.
+              Windows that are close to rank deficient are estimated using
+              numpy.linalg.lstsq.
+            * 'pinv' - Use the QR decomposition of each window, computed in
+              batches. Windows that are close to rank deficient are estimated
+              using numpy.linalg.pinv. This method matches the default
+              estimator in non-moving regression estimators.
+        cov_type : {'nonrobust', 'HCCM', 'HC0'}, optional
+            Covariance estimator:
+
+            * nonrobust - The classic OLS covariance estimator
+            * HCCM, HC0 - White heteroskedasticity robust covariance
+        cov_kwds : dict, optional
+            Unused
+        reset : int, optional
+            Interval to recompute the moving window inner products used to
+            estimate the model parameters when method is 'inv'. Smaller values
+            improve accuracy, although in practice this setting is not required
+            to be set. The inner products are always recomputed at least once
+            every ``window`` observations.
+        use_t : bool, optional
+            Flag indicating to use the Student's t distribution when computing
+            p-values.
+        params_only : bool, optional
+            Flag indicating that only parameters should be computed. Avoids
+            calculating all other statistics or performing inference.
+
+        Returns
+        -------
+        RollingRegressionResults
+            Estimation results where all pre-sample values are nan-filled.
+
+        Notes
+        -----
+        The windows are estimated in batches using stacked linear algebra
+        routines. The batches are sized so that the temporary arrays have a
+        few MB, and so memory use does not depend on the number of
+        observations beyond the arrays that hold the results. The
+        heteroskedasticity-robust middle term ``X'diag(e**2)X`` is only
+        computed when cov_type is 'HCCM' or 'HC0'.
+        """
+        method = string_like(
+            method, "method", options=("inv", "lstsq", "pinv")
+        )
+        cov_type = string_like(
+            cov_type, "cov_type", options=("nonrobust", "HCCM", "HC0"), lower=False
+        )
+        reset = int_like(reset, "reset", optional=True)
+        reset = self._y.shape[0] if reset is None else reset
+        if reset < 1:
+            raise ValueError("reset must be a positive integer")
+
+        nobs, k = self._x.shape
+        store = RollingStore(
+            params=np.full((nobs, k), np.nan),
+            ssr=np.full(nobs, np.nan),
+            llf=np.full(nobs, np.nan),
+            nobs=np.zeros(nobs, dtype=int),
+            s2=np.full(nobs, np.nan),
+            xpxi=np.full((nobs, k, k), np.nan),
+            xeex=np.full((nobs, k, k), np.nan),
+            centered_tss=np.full(nobs, np.nan),
+            uncentered_tss=np.full(nobs, np.nan),
+        )
+        first = self._min_nobs if self._expanding else self._window
+        robust = cov_type != "nonrobust"
+        if self._use_batched(first, method):
+            self._fit_batched(first, method, reset, params_only, robust, store)
+        else:
+            self._fit_loop(first, method, reset, params_only, robust, store)
+
+        return RollingRegressionResults(
+            self, store, self.k_constant, use_t, cov_type
+        )
+
+    @classmethod
+    @Appender(Model.from_formula.__doc__)
+    def from_formula(
+        cls, formula, data, window, weights=None, subset=None, *args, **kwargs
+    ):
+        if subset is not None:
+            data = data.loc[subset]
+        eval_env = kwargs.pop("eval_env", None)
+        if eval_env is None:
+            eval_env = 2
+        elif eval_env == -1:
+            mgr = FormulaManager()
+            eval_env = mgr.get_empty_eval_env()
+        else:
+            eval_env += 1  # we're going down the stack again
+        missing = kwargs.get("missing", "skip")
+
+        na_action = FormulaManager().get_na_action(action="raise", types=[])
+
+        mgr = FormulaManager()
+        result = mgr.get_matrices(
+            formula,
+            data,
+            eval_env=eval_env,
+            pandas=True,
+            na_action=na_action,
+        )
+
+        endog, exog = result
+        if (endog.ndim > 1 and endog.shape[1] > 1) or endog.ndim > 2:
+            raise ValueError(
+                "endog has evaluated to an array with multiple "
+                f"columns that has shape {endog.shape}. This occurs when "
+                "the variable converted to endog is non-numeric"
+                " (e.g., bool or str)."
+            )
+
+        kwargs.update({"missing": missing, "window": window})
+        if weights is not None:
+            kwargs["weights"] = weights
+        mod = cls(endog, exog, *args, **kwargs)
+        mod.formula = formula
+        # since we got a dataframe, attach the original
+        mod.data.frame = data
+        return mod
+
+
+extra_parameters = window_parameters + extra_base
+
+
+@Substitution(
+    model_type="Ordinary",
+    model="OLS",
+    parameters=common_params,
+    extra_parameters=extra_parameters,
+)
+@Appender(_doc)
+class RollingOLS(RollingWLS):
+    def __init__(
+        self,
+        endog,
+        exog,
+        window=None,
+        *,
+        min_nobs=None,
+        missing="drop",
+        expanding=False
+    ):
+        super().__init__(
+            endog,
+            exog,
+            window,
+            weights=None,
+            min_nobs=min_nobs,
+            missing=missing,
+            expanding=expanding,
+        )
+
+
+class RollingRegressionResults:
+    """
+    Results from rolling regressions
+
+    Parameters
+    ----------
+    model : RollingWLS
+        Model instance
+    store : RollingStore
+        Container for raw moving window results
+    k_constant : bool
+        Flag indicating that the model contains a constant
+    use_t : bool
+        Flag indicating to use the Student's t distribution when computing
+        p-values.
+    cov_type : str
+        Name of covariance estimator
+
+    """
+
+    _data_in_cache = tuple()
+
+    def __init__(
+        self, model, store: RollingStore, k_constant, use_t, cov_type
+    ):
+        self.model = model
+        self._params = store.params
+        self._ssr = store.ssr
+        self._llf = store.llf
+        self._nobs = store.nobs
+        self._s2 = store.s2
+        self._xpxi = store.xpxi
+        self._xepxe = store.xeex
+        self._centered_tss = store.centered_tss
+        self._uncentered_tss = store.uncentered_tss
+        self._k_constant = k_constant
+        self._nvar = self._xpxi.shape[-1]
+        if use_t is None:
+            use_t = cov_type == "nonrobust"
+        self._use_t = use_t
+        self._cov_type = cov_type
+        self._use_pandas = self.model.data.row_labels is not None
+        self._data_attr = []
+        self._cache = {}
+
+    def _wrap(self, val):
+        """Wrap output as pandas Series or DataFrames as needed"""
+        if not self._use_pandas:
+            return val
+        col_names = self.model.data.param_names
+        row_names = self.model.data.row_labels
+        if val.ndim == 1:
+            return Series(val, index=row_names)
+        if val.ndim == 2:
+            return DataFrame(val, columns=col_names, index=row_names)
+        else:  # ndim == 3
+            mi = MultiIndex.from_product((row_names, col_names))
+            val = np.reshape(val, (-1, val.shape[-1]))
+            return DataFrame(val, columns=col_names, index=mi)
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.aic))
+    def aic(self):
+        return self._wrap(call_cached_func(RegressionResults.aic, self))
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.bic))
+    def bic(self):
+        with np.errstate(divide="ignore"):
+            return self._wrap(call_cached_func(RegressionResults.bic, self))
+
+    def info_criteria(self, crit, dk_params=0):
+        return self._wrap(
+            RegressionResults.info_criteria(self, crit, dk_params=dk_params)
+        )
+
+    @cache_readonly
+    def params(self):
+        """Estimated model parameters"""
+        return self._wrap(self._params)
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.ssr))
+    def ssr(self):
+        return self._wrap(self._ssr)
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.llf))
+    def llf(self):
+        return self._wrap(self._llf)
+
+    @cache_readonly
+    @Appender(RegressionModel.df_model.__doc__)
+    def df_model(self):
+        return self._nvar - self._k_constant
+
+    @cache_readonly
+    def k_constant(self):
+        """Flag indicating whether the model contains a constant"""
+        return self._k_constant
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.centered_tss))
+    def centered_tss(self):
+        return self._centered_tss
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.uncentered_tss))
+    def uncentered_tss(self):
+        return self._uncentered_tss
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.rsquared))
+    def rsquared(self):
+        return self._wrap(call_cached_func(RegressionResults.rsquared, self))
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.rsquared_adj))
+    def rsquared_adj(self):
+        return self._wrap(
+            call_cached_func(RegressionResults.rsquared_adj, self)
+        )
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.nobs))
+    def nobs(self):
+        return self._wrap(self._nobs)
+
+    @cache_readonly
+    @Appender(RegressionModel.df_resid.__doc__)
+    def df_resid(self):
+        return self._wrap(self._nobs - self.df_model - self._k_constant)
+
+    @cache_readonly
+    @Appender(RegressionResults.use_t.__doc__)
+    def use_t(self):
+        return self._use_t
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.ess))
+    def ess(self):
+        return self._wrap(call_cached_func(RegressionResults.ess, self))
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.mse_model))
+    def mse_model(self):
+        return self._wrap(call_cached_func(RegressionResults.mse_model, self))
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.mse_resid))
+    def mse_resid(self):
+        return self._wrap(call_cached_func(RegressionResults.mse_resid, self))
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.mse_total))
+    def mse_total(self):
+        return self._wrap(call_cached_func(RegressionResults.mse_total, self))
+
+    def get_resid(self, out_of_sample=False):
+        """
+        Compute the rolling residuals
+
+        Parameters
+        ----------
+        out_of_sample : bool, optional
+            If False (default), the residual for observation t uses the
+            parameters estimated from the window that ends at observation t,
+            so that observation t is included in the estimation. If True, the
+            residual for observation t uses the parameters estimated from the
+            window that ends at observation t-1, which is the one-step ahead
+            prediction error.
+
+        Returns
+        -------
+        residuals : ndarray or Series
+            The residuals y[t] - x[t] @ params with one value for each
+            observation. A Series is returned if the model was created
+            using pandas inputs.
+
+        See Also
+        --------
+        statsmodels.regression.linear_model.RegressionResults.resid
+            Residuals of a single regression.
+
+        Notes
+        -----
+        Only one residual is computed for each window so that the residuals
+        of every observation in every window do not need to be stored. The
+        residuals are computed using the unweighted data, as in ``WLS``.
+
+        The residual is nan when the parameters are not available, e.g., for
+        the observations before the first window has min_nobs observations,
+        or when the observation is missing.
+        """
+        out_of_sample = bool_like(out_of_sample, "out_of_sample")
+        params = self._params
+        if out_of_sample:
+            params = np.vstack((np.full((1, params.shape[1]), np.nan), params[:-1]))
+        resid = self.model._y - np.sum(self.model._x * params, axis=1)
+        return self._wrap(resid)
+
+    @cache_readonly
+    def _cov_params(self):
+        if self._cov_type == "nonrobust":
+            return self._s2[:, None, None] * self._xpxi
+        else:
+            return self._xpxi @ self._xepxe @ self._xpxi
+
+    def cov_params(self):
+        """
+        Estimated parameter covariance
+
+        Returns
+        -------
+        ndarray or DataFrame
+            The estimated model covariances. If the original input is a numpy
+            array, the returned covariance is a 3-d array with shape
+            (nobs, nvar, nvar). If the original inputs are pandas types, then
+            the returned covariance is a DataFrame with a MultiIndex with
+            key (observation, variable), so that the covariance for
+            observation with index i is cov.loc[i].
+
+        """
+        return self._wrap(self._cov_params)
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.f_pvalue))
+    def f_pvalue(self):
+        with np.errstate(invalid="ignore"):
+            return self._wrap(
+                call_cached_func(RegressionResults.f_pvalue, self)
+            )
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.fvalue))
+    def fvalue(self):
+        if self._cov_type == "nonrobust":
+            return self.mse_model / self.mse_resid
+        else:
+            nobs = self._params.shape[0]
+            stat = np.full(nobs, np.nan)
+            k = self._params.shape[1]
+            r = np.eye(k)
+            locs = list(range(k))
+            if self.k_constant:
+                locs.pop(self.model.const_idx)
+            if not locs:
+                return stat
+            r = r[locs]
+            vcv = self._cov_params
+            rvcvr = r @ vcv @ r.T
+            p = self._params
+            for i in range(nobs):
+                rp = p[i : i + 1] @ r.T
+                denom = rp.shape[1]
+                inv_cov = np.linalg.inv(rvcvr[i])
+                stat[i] = np.squeeze(rp @ inv_cov @ rp.T) / denom
+            return stat
+
+    @cache_readonly
+    @Appender(get_cached_doc(RegressionResults.bse))
+    def bse(self):
+        with np.errstate(invalid="ignore"):
+            return self._wrap(np.sqrt(np.diagonal(self._cov_params, 0, 2)))
+
+    @cache_readonly
+    @Appender(get_cached_doc(LikelihoodModelResults.tvalues))
+    def tvalues(self):
+        with np.errstate(invalid="ignore"):
+            return self._wrap(
+                call_cached_func(LikelihoodModelResults.tvalues, self)
+            )
+
+    @cache_readonly
+    @Appender(get_cached_doc(LikelihoodModelResults.pvalues))
+    def pvalues(self):
+        if self.use_t:
+            df_resid = np.asarray(self.df_resid)[:, None]
+            with np.errstate(invalid="ignore"):
+                return stats.t.sf(np.abs(self.tvalues), df_resid) * 2
+        else:
+            with np.errstate(invalid="ignore"):
+                return stats.norm.sf(np.abs(self.tvalues)) * 2
+
+    def _conf_int(self, alpha):
+        bse = np.asarray(self.bse)
+
+        if self.use_t:
+            dist = stats.t
+            df_resid = np.asarray(self.df_resid)[:, None]
+            q = dist.ppf(1 - alpha / 2, df_resid)
+        else:
+            dist = stats.norm
+            q = dist.ppf(1 - alpha / 2)
+
+        params = np.asarray(self.params)
+        lower = params - q * bse
+        upper = params + q * bse
+        return np.asarray(list(zip(lower, upper, strict=True)))
+
+    @Appender(LikelihoodModelResults.conf_int.__doc__)
+    def conf_int(self, alpha=0.05):
+        ci = self._conf_int(alpha)
+        if not self._use_pandas:
+            return ci
+        ci_names = ("lower", "upper")
+        row_names = self.model.data.row_labels
+        col_names = self.model.data.param_names
+        mi = MultiIndex.from_product((col_names, ci_names))
+        ci = np.reshape(np.swapaxes(ci, 1, 2), (ci.shape[0], -1))
+        return DataFrame(ci, columns=mi, index=row_names)
+
+    @property
+    def cov_type(self):
+        """Name of covariance estimator"""
+        return self._cov_type
+
+    @classmethod
+    @Appender(LikelihoodModelResults.load.__doc__)
+    def load(cls, fname):
+        return LikelihoodModelResults.load(fname)
+
+    remove_data = LikelihoodModelResults.remove_data
+
+    @Appender(LikelihoodModelResults.save.__doc__)
+    def save(self, fname, remove_data=False):
+        return LikelihoodModelResults.save(self, fname, remove_data)
+
+    def plot_recursive_coefficient(
+        self,
+        variables=None,
+        alpha=0.05,
+        legend_loc="upper left",
+        fig=None,
+        figsize=None,
+    ):
+        r"""
+        Plot the recursively estimated coefficients on a given variable
+
+        Parameters
+        ----------
+        variables : {int, str, list[int], list[str], None}, optional
+            Integer index or string name of the variables whose coefficients
+            to plot. Can also be an iterable of integers or strings. Default
+            plots all coefficients.
+        alpha : None or float, optional
+            The confidence intervals for the coefficient are (1 - alpha)%. Set
+            to None to exclude confidence intervals.
+        legend_loc : str, optional
+            The location of the legend in the plot. Default is upper left.
+        fig : Figure, optional
+            If given, subplots are created in this figure instead of in a new
+            figure. Note that the grid will be created in the provided
+            figure using `fig.add_subplot()`.
+        figsize : tuple, optional
+            If a figure is created, this argument allows specifying a size.
+            The tuple is (width, height).
+
+        Returns
+        -------
+        Figure
+            The matplotlib Figure object.
+
+        """
+        from statsmodels.graphics.utils import _import_mpl, create_mpl_fig
+
+        if alpha is not None:
+            ci = self._conf_int(alpha)
+
+        row_labels = self.model.data.row_labels
+        if row_labels is None:
+            row_labels = np.arange(self._params.shape[0])
+        k_variables = self._params.shape[1]
+        param_names = self.model.data.param_names
+        if variables is None:
+            variable_idx = list(range(k_variables))
+        else:
+            if isinstance(variables, (int, str)):
+                variables = [variables]
+            variable_idx = []
+            for i in range(len(variables)):
+                variable = variables[i]
+                if variable in param_names:
+                    variable_idx.append(param_names.index(variable))
+                elif isinstance(variable, int):
+                    variable_idx.append(variable)
+                else:
+                    msg = (
+                        "variable {} is not an integer and was not found "
+                        "in the list of variable "
+                        "names: {}".format(
+                            variables[i], ", ".join(param_names)
+                        )
+                    )
+                    raise ValueError(msg)
+
+        _import_mpl()
+        fig = create_mpl_fig(fig, figsize)
+
+        loc = 0
+        import pandas as pd
+
+        if isinstance(row_labels, pd.PeriodIndex):
+            row_labels = row_labels.to_timestamp()
+        row_labels = np.asarray(row_labels)
+        for i in variable_idx:
+            ax = fig.add_subplot(len(variable_idx), 1, loc + 1)
+            params = self._params[:, i]
+            valid = ~np.isnan(self._params[:, i])
+            row_lbl = row_labels[valid]
+            ax.plot(row_lbl, params[valid])
+            if alpha is not None:
+                this_ci = np.reshape(ci[:, :, i], (-1, 2))
+                if not np.all(np.isnan(this_ci)):
+                    ax.plot(
+                        row_lbl, this_ci[:, 0][valid], "k:", label="Lower CI"
+                    )
+                    ax.plot(
+                        row_lbl, this_ci[:, 1][valid], "k:", label="Upper CI"
+                    )
+                    if loc == 0:
+                        ax.legend(loc=legend_loc)
+            ax.set_xlim(row_lbl[0], row_lbl[-1])
+            ax.set_title(param_names[i])
+            loc += 1
+
+        fig.tight_layout()
+        return fig

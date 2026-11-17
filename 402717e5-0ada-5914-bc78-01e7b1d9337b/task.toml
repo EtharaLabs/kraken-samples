@@ -1,0 +1,82 @@
+schema_version = "1.4"
+reward_type = "bounded_continuous"
+
+# D1: the modified statsmodels working tree. Harbor snapshots it out of the agent
+# container and re-materializes it at the same path in the separate verifier.
+artifacts = [
+  { source = "/app/statsmodels", exclude = [".git", "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info", "build"] },
+]
+
+[task]
+name = "ethara/402717e5-0ada-5914-bc78-01e7b1d9337b"
+version = "0.1.0"
+description = "Make statsmodels' Zivot-Andrews structural-break unit-root test fast on long series while keeping every statistic, p-value, lag, break index, exception and warning identical within stated tolerances. Continuous reward: 0.70 x the harmonic-mean speedup ratio against the reference fix on hidden, seed-randomized timed workloads (capped at 1) + 0.30 x judged code-quality items when the tester provides an OpenAI API key (compiled only otherwise); zero on any wrong result, failed covering test, unmodified tree or red line. Upstream statsmodels (BSD-3-Clause); see LICENSE-NOTICE.md. Timing needs a dedicated, otherwise idle host."
+authors = [{ name = "ankit.ethara", email = "ankit.ethara@ethara.ai" }]
+keywords = ["python", "statsmodels", "zivot-andrews", "performance-optimization", "measurement-noise-control", "continuous-reward"]
+
+[metadata]
+null_floor = 0.0
+platforms = ["linux/amd64", "linux/arm64"]
+archetype = "perf-optimization-fn"
+category = "measurement-noise-control"
+reward = "continuous"
+tags = ["optimization", "bounded-continuous", "numerical-accuracy"]
+
+[agent]
+timeout_sec = 7200.0
+network_mode = "no-network"
+user = "1000:1000"
+
+[verifier]
+timeout_sec = 7200.0
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+environment_mode = "separate"
+# The harness demotes every run of submission code to a restricted uid with a fresh
+# tmpfs HOME and TMPDIR and no write access to the harness or the measurement record.
+user = "root"
+
+# Optional judge: Harbor Reward Kit on the tester's own OpenAI API key. With OPENAI_API_KEY
+# unset the reward is the compiled score and the verifier calls nothing over the network.
+# The judge must be an OpenAI model (the tasks were authored with Claude); any other judge,
+# or a failed judge call, keeps the compiled reward.
+[verifier.env]
+REWARDKIT_JUDGE = "${REWARDKIT_JUDGE:-openai/gpt-5.6-sol}"
+OPENAI_API_KEY = "${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+LITELLM_LOCAL_MODEL_COST_MAP = "True"
+
+[verifier.environment]
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 6144
+storage_mb = 20480
+gpus = 0
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 3600.0
+cpus = 2
+memory_mb = 6144
+storage_mb = 20480
+gpus = 0
+
+[metadata.contamination]
+public_source = "https://github.com/statsmodels/statsmodels/pull/10602"
+public_since = "2026-10-27"
+note = "The reference solution is a public upstream pull request (BSD-3-Clause), merged 2026-10-27 as 7e098027b363eb06de9ec174f733a3dcbdd25e93. Models trained on data after 2026-10-27 may have seen the fix; treat scores from such models as possibly memorized."
+
+[metadata.task_spec]
+editable_surface = "/app/statsmodels/statsmodels/tsa/ outside its tests directories; other changes are discarded"
+output_location = "the edited /app/statsmodels tree, snapshotted in place for the separate verifier"
+output_schema = "zivot_andrews returns (statistic, p-value, critical values, lags, break index) as at the base commit"
+units = "wall-clock seconds of the first timed zivot_andrews call in a fresh python -I process on one pinned core, after import and one untimed warm-up call on a different series; median of 11 interleaved expert/submission process pairs"
+tolerances = "condition number below 1e5: rtol 1e-9 / atol 1e-12 against the base commit, exact critical values, lag and break index (near-tie rule); 1e5 to 5e6: rtol 1e-6 against an independent per-period pivoted QR oracle (near-tie rule); fallback cases (condition number above 5e6 and the other fallback triggers): base or oracle within rtol 1e-6, exceptions and warnings exact"
+timed_workloads = "nobs 199871 (c, autolag None, trim 0.15), 149953 (c, None, 0.33), 99989 (c, None, 0.05), 59971 (t, None, 0.33), 60023 (ct, None, 0.33), 100019 (c, AIC, 0.33), each with a planted level break and a verify-time seed"
+reward = "0.70 x compiled_score + 0.30 x judged_score; compiled_score = min(1, harmonic mean over timed workloads of SR_i), SR_i = exp(median over 11 interleaved process pairs of log(T_expert / T_patch)), floored at 0.001, counted as 1.0 when it is at or above exp(-2 x noise_band_i), twice that workload's own A/A band in the same run, 0.001 for a workload whose call exceeds 60 s; judged_score = weighted mean of 8 judged items (Harbor Reward Kit in the verifier, openai/gpt-5.6-sol by default, 3 samples each), only with OPENAI_API_KEY set; reward 0.0, and no judge call, on any red line, covering-test failure, correctness failure or unmodified tree; reward = compiled_score with no key or a failed judge call"
+stages = "tests/test.sh measures, scores the compiled criteria, then, only when OPENAI_API_KEY is set and no failure stage fired, the judged criteria; it writes /logs/verifier/reward.json and reward.txt on every path"
+noise_floor = "an expert-against-expert A/A median absolute log ratio of 0.02 or more repeats the whole interleaved measurement, up to three rounds; only when every round is at or above 0.02 does the verifier abort with the reason noise_floor and reward 0; every round's band is logged"
+diagnostic_keys = "compiled_score, judged_score (with a judge only), correctness, geomean_speedup_ratio (capped at 1), noise_band, failure_stage (0 none, 1 red line, 2 unmodified, 3 covering tests, 4 correctness, 5 timeout)"
+tolerance_disclosure = "the correctness tolerances are stated in the instruction; the timed sizes and seeds are hidden by design, as in the reference benchmark (SWE-fficiency)"

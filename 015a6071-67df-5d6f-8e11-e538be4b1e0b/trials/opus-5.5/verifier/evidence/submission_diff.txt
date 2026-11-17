@@ -1,0 +1,198 @@
+changed paths: {"applied": ["cirq-core/cirq/circuits/circuit_operation.py", "cirq-core/cirq/transformers/merge_k_qubit_gates.py", "cirq-core/cirq/transformers/merge_single_qubit_gates.py"], "ignored": [], "protected": []}
+
+--- a/cirq-core/cirq/circuits/circuit_operation.py
++++ b/cirq-core/cirq/circuits/circuit_operation.py
+@@ -24,6 +24,7 @@
+ import math
+ from collections.abc import Callable, Iterator, Mapping, Sequence
+ from functools import cached_property
++from types import NotImplementedType
+ from typing import Any, cast, TYPE_CHECKING, TypeAlias
+ 
+ import numpy as np
+@@ -305,6 +306,31 @@
+         operations = self._mapped_any_loop.all_operations()
+         return all(protocols.has_unitary(op) for op in operations)
+ 
++    def _unitary_(self) -> np.ndarray | NotImplementedType:
++        """Returns the unitary of a single-qubit circuit operation, if it has one.
++
++        The matrices of the contained operations are multiplied directly, which avoids
++        decomposing the operation into a mapped circuit. Operations on more than one
++        qubit, operations with symbolic repetitions or `repeat_until`, and circuits
++        containing a non-unitary operation return NotImplemented, so that the unitary
++        protocol falls back to its other strategies.
++        """
++        qubits = self.qubits
++        if len(qubits) != 1 or self.repeat_until or not isinstance(self.repetitions, INT_CLASSES):
++            return NotImplemented
++        mat = np.eye(qubits[0].dimension, dtype=np.complex128)
++        for op in self.circuit.all_operations():
++            if self.param_resolver:
++                op = protocols.resolve_parameters(op, self.param_resolver, recursive=False)
++            op_unitary = protocols.unitary(op, None)
++            if op_unitary is None:
++                return NotImplemented
++            # Operations without qubits contribute a global phase.
++            mat = op_unitary @ mat if op.qubits else op_unitary[0, 0] * mat
++        if self.repetitions < 0:
++            mat = mat.conj().T
++        return np.linalg.matrix_power(mat, abs(int(self.repetitions)))
++
+     def _ensure_deterministic_loop_count(self):
+         if self.repeat_until or isinstance(self.repetitions, sympy.Expr):
+             raise ValueError('Cannot unroll circuit due to nondeterministic repetitions')
+--- a/cirq-core/cirq/transformers/merge_k_qubit_gates.py
++++ b/cirq-core/cirq/transformers/merge_k_qubit_gates.py
+@@ -52,12 +52,17 @@
+                     merged_circuit_op_tag=merged_circuit_op_tag,
+                 ).freeze()
+             ).with_tags(*op.tags)
+-        if not (protocols.num_qubits(op) <= k and protocols.has_unitary(op)):
++        # Merged components only contain unitary operations acting on <= k qubits, so they
++        # can be rewritten without checking them again.
++        is_merged_component = merged_circuit_op_tag in op.tags
++        if not (
++            is_merged_component or (protocols.num_qubits(op) <= k and protocols.has_unitary(op))
++        ):
+             return op
+         if rewriter:
+             return rewriter(
+                 cast(circuits.CircuitOperation, op_untagged)
+-                if merged_circuit_op_tag in op.tags
++                if is_merged_component
+                 else circuits.CircuitOperation(circuits.FrozenCircuit(op))
+             )
+         return ops.MatrixGate(protocols.unitary(op)).on(*op.qubits)
+--- a/cirq-core/cirq/transformers/merge_single_qubit_gates.py
++++ b/cirq-core/cirq/transformers/merge_single_qubit_gates.py
+@@ -16,10 +16,15 @@
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Callable, Hashable
++import itertools
++from collections import defaultdict
++from collections.abc import Callable, Hashable, Sequence
+ from typing import cast, TYPE_CHECKING
+ 
++import numpy as np
++
+ from cirq import circuits, ops, protocols
++from cirq.circuits.circuit import CIRCUIT_TYPE
+ from cirq.study.resolver import ParamResolver
+ from cirq.study.sweeps import dict_to_zip_sweep, ListSweep, ProductOrZipSweepLike, Sweep, Zip
+ from cirq.transformers import (
+@@ -120,6 +125,12 @@
+ ) -> cirq.Circuit:
+     """Merges adjacent moments with only 1-qubit rotations to a single moment with PhasedXZ gates.
+ 
++    Each run of adjacent mergeable moments is replaced by a single moment. On every qubit, the
++    unitaries of the run's operations are multiplied and converted to one `cirq.PhasedXZGate`,
++    which is dropped if it is close to identity. A `cirq.PhasedXZGate` that is the only
++    operation on its qubit in the run is kept as it is. If the run contains several global
++    phase operations, they are combined into a single `cirq.GlobalPhaseGate`.
++
+     Args:
+         circuit: Input circuit to transform. It will not be modified.
+         context: `cirq.TransformerContext` storing common configurable options for transformers.
+@@ -130,6 +141,7 @@
+         Copy of the transformed input circuit.
+     """
+     tags_to_ignore = set(context.tags_to_ignore) if context else set()
++    deep = context.deep if context else False
+ 
+     def can_merge_moment(m: cirq.Moment):
+         return all(
+@@ -139,40 +151,59 @@
+             for op in m
+         )
+ 
+-    def merge_func(m1: cirq.Moment, m2: cirq.Moment) -> cirq.Moment | None:
+-        if not (can_merge_moment(m1) and can_merge_moment(m2)):
+-            return None
++    def merge_run(run: list[cirq.Moment]) -> cirq.Moment:
++        ops_by_qubit: dict[cirq.Qid, list[cirq.Operation]] = defaultdict(list)
++        phase_ops: list[cirq.Operation] = []
++        for m in run:
++            for op in m:
++                if op.qubits:
++                    ops_by_qubit[op.qubits[0]].append(op)
++                else:
++                    phase_ops.append(op)
+         ret_ops = []
+-        for q in m1.qubits | m2.qubits:
+-            op1, op2 = m1.operation_at(q), m2.operation_at(q)
+-            if op1 and op2:
+-                mat = protocols.unitary(op2) @ protocols.unitary(op1)
+-                gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(mat, atol)
+-                if gate:
+-                    ret_ops.append(gate(q))
++        for q, q_ops in ops_by_qubit.items():
++            if len(q_ops) == 1 and isinstance(q_ops[0].gate, ops.PhasedXZGate):
++                ret_ops.append(q_ops[0])
++                continue
++            mat = protocols.unitary(q_ops[0])
++            for op in q_ops[1:]:
++                mat = protocols.unitary(op) @ mat
++            gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(mat, atol)
++            if gate:
++                ret_ops.append(gate(q))
++        if len(phase_ops) > 1:
++            coefficient = np.prod([protocols.unitary(op)[0, 0] for op in phase_ops])
++            phase_ops = [ops.GlobalPhaseGate(coefficient).on()]
++        return circuits.Moment(ret_ops + phase_ops)
++
++    def merge_circuit(
++        c: CIRCUIT_TYPE, recursion_tags_to_ignore: Sequence[Hashable]
++    ) -> CIRCUIT_TYPE:
++        if deep:
++            # Like `cirq.merge_moments`, only circuit operations directly in the input circuit
++            # are skipped when tagged with `tags_to_ignore`.
++            c = transformer_primitives.map_operations(
++                c,
++                lambda op, _: (
++                    op.untagged.replace(circuit=merge_circuit(op.untagged.circuit, ()))
++                    .with_tags(*op.tags)
++                    if isinstance(op.untagged, circuits.CircuitOperation)
++                    else op
++                ),
++                tags_to_ignore=recursion_tags_to_ignore,
++            )
++        merged_moments: list[cirq.Moment] = []
++        for mergeable, group in itertools.groupby(c, key=can_merge_moment):
++            run = list(group)
++            if mergeable and len(run) > 1:
++                merged_moments.append(merge_run(run))
+             else:
+-                op = op1 or op2
+-                assert op is not None
+-                if isinstance(op.gate, ops.PhasedXZGate):
+-                    ret_ops.append(op)
+-                else:
+-                    gate = single_qubit_decompositions.single_qubit_matrix_to_phxz(
+-                        protocols.unitary(op), atol
+-                    )
+-                    if gate:
+-                        ret_ops.append(gate(q))
+-        # Transfer global phase
+-        for op in m1.operations + m2.operations:
+-            if protocols.num_qubits(op) == 0:
+-                ret_ops.append(op)
+-        return circuits.Moment(ret_ops)
+-
+-    return transformer_primitives.merge_moments(
+-        circuit,
+-        merge_func,
+-        deep=context.deep if context else False,
+-        tags_to_ignore=tuple(tags_to_ignore),
+-    ).unfreeze(copy=False)
++                merged_moments.extend(run)
++        if isinstance(c, circuits.FrozenCircuit):
++            return cast(CIRCUIT_TYPE, circuits.FrozenCircuit(merged_moments, tags=c.tags))
++        return cast(CIRCUIT_TYPE, circuits.Circuit(merged_moments))
++
++    return merge_circuit(circuit, tuple(tags_to_ignore)).unfreeze(copy=False)
+ 
+ 
+ def _sweep_on_symbols(sweep: Sweep, symbols: set[sympy.Symbol]) -> Sweep:

@@ -1,0 +1,39 @@
+# ignore compiled python files
+__pycache__
+*.pyc
+
+# ignore coverage files
+*.py,cover
+*.coverage
+*.coverage.*
+
+# ignore output from pytest-benchmark and pytest-profiling
+/.benchmarks/
+/prof/
+
+# packaging
+*.egg-info/
+build/
+
+# API docs
+docs/api_docs
+# files in docs/build/ are hand maintained
+!/docs/build/
+
+# swap files
+*.swp
+
+# Ignore generated Jupyter files
+*.ipynb_checkpoints/
+
+# Ignore Bazel files
+/bazel-*
+
+# Default pycharm virtual env
+.venv/
+
+# pyenv configuration
+.python-version
+
+# notebook test output
+/out

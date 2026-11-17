@@ -1,0 +1,109 @@
+diff --git a/numpy/lib/_arraysetops_impl.py b/numpy/lib/_arraysetops_impl.py
+--- a/numpy/lib/_arraysetops_impl.py
++++ b/numpy/lib/_arraysetops_impl.py
+@@ -805,6 +805,92 @@
+     return aux[flag[1:] & flag[:-1]]
+ 
+ 
++def _is_stringdtype(dt):
++    return isinstance(dt, np.dtypes.StringDType)
++
++
++def _isin_strings(ar1, ar2, invert):
++    """Hash-based membership test for StringDType (and ``U``) operands.
++
++    Produces exactly the result of the elementwise comparison loop used for
++    object-like dtypes, or returns None if the fast path does not apply.
++    """
++    dt1, dt2 = ar1.dtype, ar2.dtype
++    s1, s2 = _is_stringdtype(dt1), _is_stringdtype(dt2)
++    if not (s1 or s2):
++        return None
++    if not ((s1 or dt1.kind == 'U') and (s2 or dt2.kind == 'U')):
++        return None
++    if ar1.ndim != 1 or ar2.ndim != 1:
++        return None
++
++    n = ar1.shape[0]
++    cmp = np.not_equal if invert else np.equal
++
++    # Split the test elements into plain strings (hashable, compared by
++    # value) and anything else (missing-value sentinels), which are compared
++    # the regular way, once per distinct object.
++    strs = set()
++    others = {}
++    slow_strs = []
++    for v in ar2.tolist():
++        if type(v) is str:
++            strs.add(v)
++        elif id(v) not in others:
++            others[id(v)] = v
++    if not s1 and strs:
++        # Fixed-width unicode ignores trailing NUL characters when comparing.
++        for v in [v for v in strs if v.endswith('\x00')]:
++            strs.discard(v)
++            slow_strs.append(v)
++
++    lst = ar1.tolist()
++    na_pos = None
++    if s1 and hasattr(dt1, 'na_object') and type(dt1.na_object) is not str:
++        na = dt1.na_object
++        na_pos = np.fromiter((x is na for x in lst), dtype=bool, count=n)
++        if na_pos.any():
++            na_idx = np.flatnonzero(na_pos)
++            lst = [x for x in lst if x is not na]
++        else:
++            na_pos = None
++
++    if strs:
++        hits = np.fromiter(map(strs.__contains__, lst), dtype=bool,
++                           count=len(lst))
++    else:
++        hits = np.zeros(len(lst), dtype=bool)
++
++    if na_pos is not None:
++        res = np.empty(n, dtype=bool)
++        res[~na_pos] = hits
++        if strs:
++            na_row = cmp(ar1[na_idx[:1]],
++                         np.array(list(strs), dtype=dt1))
++            na_val = bool(na_row.all() if invert else na_row.any())
++        else:
++            na_val = False
++        res[na_pos] = na_val
++        hits = res
++
++    if invert:
++        mask = ~hits
++        if na_pos is not None:
++            # hits already holds the "!=" result for the missing values
++            mask[na_pos] = hits[na_pos] if strs else True
++        for a in slow_strs:
++            mask &= (ar1 != a)
++        for a in others.values():
++            mask &= (ar1 != a)
++    else:
++        mask = hits
++        for a in slow_strs:
++            mask |= (ar1 == a)
++        for a in others.values():
++            mask |= (ar1 == a)
++    return mask
++
++
+ def _isin(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
+     # Ravel both arrays, behavior for the first array could be different
+     ar1 = np.asarray(ar1).ravel()
+@@ -908,6 +994,12 @@
+             "supported for boolean or integer arrays. "
+             "Please select 'sort' or None for kind."
+         )
++
++    # Fast path for variable-width strings (optionally mixed with fixed-width
++    # unicode), which would otherwise use the slow quadratic loop below.
++    mask = _isin_strings(ar1, ar2, invert)
++    if mask is not None:
++        return mask
+ 
+     # Check if one of the arrays may contain arbitrary objects
+     contains_object = ar1.dtype.hasobject or ar2.dtype.hasobject

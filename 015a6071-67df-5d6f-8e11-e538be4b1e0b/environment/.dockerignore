@@ -1,0 +1,5 @@
+*
+!cirq-requirements.txt
+!workload/
+!workload/**
+**/__pycache__

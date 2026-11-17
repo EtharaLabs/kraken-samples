@@ -1,0 +1,297 @@
+# Copyright 2018-2021 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Tests for the Grover Diffusion Operator template
+"""
+
+import functools
+import itertools
+
+import numpy as np
+import pytest
+
+import pennylane as qp
+from pennylane.ops import Hadamard, MultiControlledX, PauliZ
+from pennylane.ops.functions.assert_valid import _test_decomposition_rule
+
+
+def test_repr():
+    """Tests the repr method for GroverOperator."""
+    op = qp.GroverOperator(wires=(0, 1, 2), work_wires=(3, 4))
+    expected = "GroverOperator(wires=[0, 1, 2], work_wires=[3, 4])"
+    assert repr(op) == expected
+
+
+def test_work_wire_property():
+    op = qp.GroverOperator(wires=(0, 1, 2), work_wires=(3, 4))
+    expected = qp.wires.Wires((3, 4))
+    assert op.work_wires == expected
+
+
+@pytest.mark.usefixtures("enable_and_disable_capture")
+def test_standard_validity():
+    """Test the standard criteria for a valid operation."""
+    work_wires = qp.wires.Wires((3, 4))
+    op = qp.GroverOperator(wires=(0, 1, 2), work_wires=work_wires)
+    qp.ops.functions.assert_valid(op)
+
+
+def test_work_wires():
+    """Assert work wires get passed to MultiControlledX"""
+    wires = ("a", "b")
+    work_wire = ("aux",)
+
+    op = qp.GroverOperator(wires=wires, work_wires=work_wire)
+
+    assert op.work_wires == work_wire
+
+    ops = op.decomposition()
+
+    assert ops[2].work_wires == work_wire
+
+
+def test_work_wires_None():
+    """Test that work wires of None are not inpreted as work wires."""
+    op = qp.GroverOperator(wires=(0, 1, 2, 3), work_wires=None)
+    assert op.hyperparameters["work_wires"] == qp.wires.Wires([])
+
+
+@pytest.mark.parametrize("bad_wires", [0, (0,), tuple()])
+def test_single_wire_error(bad_wires):
+    """Assert error raised when called with only a single wire"""
+
+    with pytest.raises(ValueError, match="GroverOperator must have at least"):
+        qp.GroverOperator(wires=bad_wires)
+
+
+decomp_3wires = [
+    qp.Hadamard,
+    qp.Hadamard,
+    qp.PauliZ,
+    qp.MultiControlledX,
+    qp.PauliZ,
+    qp.Hadamard,
+    qp.Hadamard,
+    qp.GlobalPhase,
+]
+
+
+def decomposition_wires(wires):
+    wire_order = [
+        wires[0],
+        wires[1],
+        wires[2],
+        wires,
+        wires[2],
+        wires[0],
+        wires[1],
+        wires,
+    ]
+    return wire_order
+
+
+@pytest.mark.parametrize("n_wires", [2, 4, 7])
+def test_grover_diffusion_matrix(n_wires):
+    """Test that the Grover diffusion matrix is the same as when constructed in a different way"""
+    wires = list(range(n_wires))
+
+    # Test-oracle
+    oracle = np.identity(2**n_wires)
+    oracle[0, 0] = -1
+
+    # s1 = H|0>, Hadamard on a single qubit in the ground state
+    s1 = np.array([1, 1]) / np.sqrt(2)
+
+    # uniform superposition state
+    s = functools.reduce(np.kron, list(itertools.repeat(s1, n_wires)))
+    # Grover matrix
+    G_matrix = qp.GroverOperator(wires=wires).matrix()
+
+    amplitudes = G_matrix @ oracle @ s
+    probs = amplitudes**2
+
+    # Create Grover diffusion matrix G in alternative way
+    oplist = list(itertools.repeat(Hadamard.compute_matrix(), n_wires - 1))
+    oplist.append(PauliZ.compute_matrix())
+
+    ctrl_str = [0] * (n_wires - 1)
+    CX = MultiControlledX(
+        control_values=ctrl_str,
+        wires=wires,
+        work_wires=None,
+    ).matrix()
+
+    M = functools.reduce(np.kron, oplist)
+    G = M @ CX @ M
+
+    amplitudes2 = G @ oracle @ s
+    probs2 = amplitudes2**2
+
+    assert np.allclose(probs, probs2)
+
+
+def test_grover_diffusion_matrix_results():
+    """Test that the matrix gives the same result as when running the example in the documentation
+    `here <https://pennylane.readthedocs.io/en/stable/code/api/pennylane.templates.subroutines.GroverOperator.html>`_
+    """
+    n_wires = 3
+    wires = list(range(n_wires))
+
+    def oracle():
+        qp.Hadamard(wires[-1])
+        qp.Toffoli(wires=wires)
+        qp.Hadamard(wires[-1])
+
+    dev = qp.device("default.qubit", wires=wires)
+
+    @qp.qnode(dev)
+    def GroverSearch(num_iterations=1):
+        for wire in wires:
+            qp.Hadamard(wire)
+
+        for _ in range(num_iterations):
+            oracle()
+            qp.GroverOperator(wires=wires)
+        return qp.probs(wires)
+
+    # Get probabilities from example
+    probs_example = GroverSearch(num_iterations=1)
+
+    # Grover diffusion matrix
+    G_matrix = qp.GroverOperator(wires=wires).matrix()
+
+    oracle_matrix = np.identity(2**n_wires)
+    oracle_matrix[-1, -1] = -1
+
+    # s1 = H|0>, Hadamard on a single qubit in the ground state
+    s1 = np.array([1, 1]) / np.sqrt(2)
+
+    # uniform superposition state
+    s = functools.reduce(np.kron, list(itertools.repeat(s1, n_wires)))
+
+    amplitudes = G_matrix @ oracle_matrix @ s
+    # Check that the probabilities are the same
+    probs_matrix = amplitudes**2
+
+    assert np.allclose(probs_example, probs_matrix)
+
+
+@pytest.mark.parametrize("wires", ((0, 1, 2), ("a", "c", "b")))
+def test_expand(wires):
+    """Asserts decomposition uses expected operations and wires"""
+    op = qp.GroverOperator(wires=wires)
+
+    decomp = op.decomposition()
+
+    expected_wires = decomposition_wires(wires)
+
+    assert len(decomp) == len(decomp_3wires) == len(expected_wires)
+
+    for actual_op, expected_class, expected_wire in zip(decomp, decomp_3wires, expected_wires):
+        assert isinstance(actual_op, expected_class)
+        if expected_class is not qp.GlobalPhase:
+            assert actual_op.wires == qp.wires.Wires(expected_wire)
+
+
+@pytest.mark.parametrize("wires, work_wires", [([0, 1, 2], None), ([0, 1, 2, 3], [4, 5])])
+@pytest.mark.usefixtures("enable_and_disable_capture")
+def test_decomposition_new(wires, work_wires):
+    """Tests the decomposition rule implemented with the new system."""
+    op = qp.GroverOperator(wires=wires, work_wires=work_wires)
+    for rule in qp.list_decomps(qp.GroverOperator):
+        _test_decomposition_rule(op, rule)
+
+
+@pytest.mark.parametrize("n_wires", [6, 13])
+def test_findstate(n_wires):
+    """Asserts can find state marked by oracle, with operation full matrix and decomposition."""
+    wires = list(range(n_wires))
+
+    dev = qp.device("default.qubit", wires=wires)
+
+    @qp.qnode(dev)
+    def circ():
+        for wire in wires:
+            qp.Hadamard(wire)
+
+        for _ in range(2):
+            qp.Hadamard(wires[0])
+            qp.MultiControlledX(wires=wires[1:] + wires[0:1])
+            qp.Hadamard(wires[0])
+            qp.GroverOperator(wires=wires)
+
+        return qp.probs(wires=wires)
+
+    probs = circ()
+
+    assert np.argmax(probs) == len(probs) - 1
+
+
+def test_matrix(tol):
+    """Test that the matrix representation is correct."""
+
+    res_static = qp.GroverOperator.compute_matrix(2, work_wires=None)
+    res_dynamic = qp.GroverOperator(wires=[0, 1]).matrix()
+    res_reordered = qp.GroverOperator(wires=[0, 1]).matrix([1, 0])
+
+    expected = np.array(
+        [[-0.5, 0.5, 0.5, 0.5], [0.5, -0.5, 0.5, 0.5], [0.5, 0.5, -0.5, 0.5], [0.5, 0.5, 0.5, -0.5]]
+    )
+
+    assert np.allclose(res_static, expected, atol=tol, rtol=0)
+    assert np.allclose(res_dynamic, expected, atol=tol, rtol=0)
+    # reordering should not affect this particular matrix
+    assert np.allclose(res_reordered, expected, atol=tol, rtol=0)
+
+
+@pytest.mark.parametrize("n_wires", [2, 3, 5])
+def test_decomposition_matrix(n_wires):
+    """Test that the decomposition and the matrix match."""
+    wires = list(range(n_wires))
+    op = qp.GroverOperator(wires)
+    mat1 = op.matrix()
+    mat2 = qp.matrix(qp.tape.QuantumScript(op.decomposition()), wire_order=wires)
+    assert np.allclose(mat1, mat2)
+
+
+@pytest.mark.jax
+def test_jax_jit():
+    import jax
+
+    n_wires = 3
+    wires = list(range(n_wires))
+
+    def oracle():
+        qp.Hadamard(wires[-1])
+        qp.Toffoli(wires=wires)
+        qp.Hadamard(wires[-1])
+
+    dev = qp.device("default.qubit", wires=wires)
+
+    @qp.qnode(dev)
+    def circuit():
+        for wire in wires:
+            qp.Hadamard(wire)
+
+        oracle()
+        qp.GroverOperator(wires=wires)
+
+        oracle()
+        qp.GroverOperator(wires=wires)
+
+        return qp.probs(wires)
+
+    jit_circuit = jax.jit(circuit)
+
+    assert qp.math.allclose(circuit(), jit_circuit())

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Copyright 2018 The Cirq Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#####
+# The main file to use to setup your PYTHONPATH. It sets up all cirq modules on the path.
+# The file can be sourced from any location with bash or zsh.
+# Usage:
+#   source dev_tools/pypath
+#####
+
+
+if [ -n "${ZSH_VERSION}" ]; then
+    # shellcheck disable=2296,2298
+    _PYPATH_BASE_DIR="${${(%):-%x}:a:h:h}"
+else
+    _PYPATH_BASE_DIR=$(d=$(dirname "${BASH_SOURCE[0]:?}") && cd "${d}/.." && pwd)
+fi
+
+if ! python --version | grep -q -F "Python 3."; then
+    echo "python command does not start Python 3" >&2
+    echo "Please use a virtual environment created for Python 3." >&2
+    return 2
+fi
+
+_PYPATH_PREFIX="${_PYPATH_BASE_DIR}$(
+    set -o pipefail
+    cd "${_PYPATH_BASE_DIR}" &&
+        env PYTHONPATH=. python dev_tools/modules.py list --mode folder |
+        xargs printf ":${_PYPATH_BASE_DIR}/%s"
+)" || return $?
+
+[[ $PYTHONPATH == ${_PYPATH_PREFIX}* ]] ||
+    export PYTHONPATH="${_PYPATH_PREFIX}${PYTHONPATH:+:}${PYTHONPATH}"
+
+unset _PYPATH_BASE_DIR
+unset _PYPATH_PREFIX

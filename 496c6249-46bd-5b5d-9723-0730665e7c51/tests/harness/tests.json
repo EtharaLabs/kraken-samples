@@ -1,0 +1,13 @@
+{
+ "pristine_test_paths": [
+  "numpy/_core/tests",
+  "numpy/lib/tests",
+  "numpy/conftest.py"
+ ],
+ "pytest_timeout_sec": 1800,
+ "runner_uid": 10001,
+ "test_selection": [
+  "numpy/_core/tests/test_stringdtype.py",
+  "numpy/lib/tests/test_arraysetops.py"
+ ]
+}

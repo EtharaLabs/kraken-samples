@@ -1,0 +1,74 @@
+{
+ "build_timeout_sec": 2400,
+ "builder_uid": 10002,
+ "child_timeout_sec": 600,
+ "correctness_seeds": 2,
+ "harness_sha256": {
+  "opt/kraken/compiled_only.sh": "317ef179316fbb8df3e1f1d476b6e7feef1608c2942fcaeb2bb3f72be6ab82d7",
+  "opt/kraken/harness/build.py": "8c77e864b5c0b5ff46ca4f3908da88b3d837eb9cfcf77667334f614a1d8c4316",
+  "opt/kraken/harness/child.py": "513d45d31f81674834dd928f6dacf052e055c8c687ba2802d08b68e0f46d5570",
+  "opt/kraken/harness/ctrf.py": "4c75839a446bd06b5d787fb937266b73509732abe2dba51d4bdbaf43458f04e1",
+  "opt/kraken/harness/measure.py": "8b9fe8d5ac9600e6e5ca8ed9659c68cd0cf2cdd5504eff1cb7c6a726990ba550",
+  "opt/kraken/harness/repotests.py": "c3e77f5569c935dcb504d8027ee3bea011a89940d7df55c0d64577bee19142c5",
+  "opt/kraken/harness/runner.py": "e58a90bc1d27a1accbb8f68bcec978a3e9adf38e9cdd02e0111f261c08978485",
+  "opt/kraken/harness/tests.json": "27d4c4f39e2805dc414b368a691765ad4cbdafca623d2fbc9b949dbfcf7f5de2",
+  "opt/kraken/harness/treeops.py": "574f33d7677de498d775b8358d2c2730dfc99ded4bcbf6ccc0d2e2df54ae3f29",
+  "opt/kraken/harness/workloads.py": "a35aaba7c3e54bb8046f2fbdb177e1a7942f488dc764468d0d71407d987098af",
+  "opt/kraken/judge_guard.py": "647ea4255a5e4a7e089666191fb1b959f8351ddded24b3179a47ad11f71a0663",
+  "opt/kraken/reward.compiled.toml": "d057894db669a645464fa311e0833f293b8813a808407984b00ef01b849d8369",
+  "tests/cheat-checks.json": "5381b0ea1a6a71093b5292e8a92ad38568bddfd5b0d78dc1ede3f26f3ff617bd",
+  "tests/diag_correctness.py": "e692e88100de4150abf08b9082a617190a43b100ca40631a70338ac67ec456c9",
+  "tests/diag_speedup.py": "c07ab29243ecff23c029b9674e94a6d1dcdef3dd904200a9638c851f32bbd180",
+  "tests/judge.toml": "4aa6556f5e7c35471e1fe10f5a403c24c0c098728f78cb1a063b85feb04ac91c",
+  "tests/reward.toml": "1bef381bb46c587d18b24531238eb5bd86a7cc3d500890eb89c99fe5e85079c3",
+  "tests/test.sh": "f105c4c017b0faf802dc2b7c311dd16aafa53f51b917d65f084d3c597c7e1832",
+  "tests/test_output.py": "ae68eabeebd60fe0823c2753788b31a1d2337875998206a007df0513a321eb18"
+ },
+ "pristine_test_paths": [
+  "numpy/_core/tests",
+  "numpy/lib/tests",
+  "numpy/conftest.py"
+ ],
+ "pytest_timeout_sec": 1800,
+ "runner_uid": 10001,
+ "test_selection": [
+  "numpy/_core/tests/test_stringdtype.py",
+  "numpy/lib/tests/test_arraysetops.py"
+ ],
+ "timing": {
+  "always": false,
+  "classes": {
+   "mixed": 0.05,
+   "nan": 0.05,
+   "none": 0.05,
+   "object": 0.4,
+   "plain": 0.05,
+   "str_na": 0.4
+  },
+  "left_slots": [
+   [
+    20000,
+    35000
+   ],
+   [
+    40000,
+    60000
+   ]
+  ],
+  "opt_threshold": 0.95,
+  "reps": 3,
+  "right_range": [
+   2000,
+   4000
+  ],
+  "tau_floor": 2.0
+ },
+ "visible": {
+  "literals": [
+   "20260731",
+   "13579",
+   "2468"
+  ],
+  "seed": 20260731
+ }
+}

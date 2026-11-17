@@ -1,0 +1,78 @@
+{
+ "child_timeout_sec": 900,
+ "f2p_test": "tests/core/operator/test_pop_op_eqns.py",
+ "families": {
+  "adj": [
+   10000,
+   14000
+  ],
+  "adjctrl": [
+   5500,
+   8500
+  ],
+  "cnot": [
+   9000,
+   13000
+  ],
+  "ctrl": [
+   7000,
+   10000
+  ],
+  "prod": [
+   10000,
+   15000
+  ]
+ },
+ "harness_sha256": {
+  "opt/kraken/harness/child.py": "c119deb88c45e1c2d2e7c5112f48f8cee6229f4560125e71ec00bbb7e255c81f",
+  "opt/kraken/harness/measure.py": "548e8a67343087158ad027cd8ecc590a888118ad3c27995120105750d7f26aa6",
+  "opt/kraken/harness/repotests.py": "00b182001d31842d629bc0fa729cfd2e544db8f7da0fb405c847d992110ce962",
+  "opt/kraken/harness/runner.py": "4eb8d0f52b0b3a691ad6628e5551443efc3cefb62a805c744acefab9ce07e920",
+  "opt/kraken/harness/tests.json": "ba01cecec443fd9506e11bfea0648a1cd32003ce796c01b89125a1fabbdb8458",
+  "opt/kraken/harness/treeops.py": "a47a29c11349a815d16100acfd4ac9938438b5a312d0ba0600a1d54c4bf5d335",
+  "opt/kraken/harness/workloads.py": "538b8184726efe0c6a97bf9854b22c9a8f12cb8bdaa28f2d13e343595d9102fa",
+  "opt/kraken/judge_guard.py": "09a34aa3b0fbaa7642816ff210e0d07cbce177445ed5c9178d99d86de95d7fc6",
+  "opt/kraken/reward.compiled.toml": "009d454ce1931c382e281a79517a0600d3caf784665f6e7d6ade8f639067fd94",
+  "tests/diag_correctness.py": "5d1cf5de45f366829cc4d89f958472f3e6a10f2bbe7647abbd1aa782921deac8",
+  "tests/diag_speedup.py": "734222b7057849913c5e379109c9c0b23029ad7deffc6447004786846cbfbfb4",
+  "tests/judge.toml": "9148f61c3930f8cf8b4c7a77fc59162fd9580a0680642aa84d8698cdebdc27a9",
+  "tests/reward.toml": "c41a4ea69e36db297105591356cbcaf2cdd0d3183af16d6134090e4ebae603a8",
+  "tests/test.sh": "3118ea9619270528c444ac86469bba927a8a31db135965885606f73434c70a28",
+  "tests/test_output.py": "cccaa22c98d23753cd26fe13990c58e9bc561eb9621975e2d86e46f245e3372b"
+ },
+ "program_seeds": 6,
+ "pytest_timeout_sec": 1800,
+ "reps": 5,
+ "runner_uid": 10001,
+ "tau": 1.25,
+ "test_ignore": [
+  "tests/capture/autograph"
+ ],
+ "test_selection": [
+  "tests/capture",
+  "tests/core",
+  "tests/test_queuing.py",
+  "tests/ops/op_math/test_adjoint.py",
+  "tests/ops/op_math/test_adjoint2.py",
+  "tests/ops/op_math/test_controlled.py",
+  "tests/ops/op_math/test_controlled2.py",
+  "tests/ops/op_math/test_controlled_ops.py",
+  "tests/ops/op_math/test_composite2.py",
+  "tests/ops/op_math/test_composite_op2_capture.py",
+  "tests/ops/op_math/test_prod.py",
+  "tests/ops/op_math/test_prod2.py",
+  "tests/ops/op_math/test_pow2.py",
+  "tests/ops/op_math/test_symbolic_op2.py",
+  "tests/ops/op_math/test_symbolic_op2_capture.py",
+  "tests/ops/op_math/test_change_op_basis2.py"
+ ],
+ "visible": {
+  "literals": [
+   "20261014",
+   "92d44047157340710fb64a635e3391cec9a4b29159388367dcc1b2e4819bd291",
+   "6000"
+  ],
+  "n": 6000,
+  "seed": 20261014
+ }
+}

@@ -1,0 +1,917 @@
+changed paths: {"applied": ["sklearn/linear_model/_cd_fast.pyx", "sklearn/linear_model/_coordinate_descent.py"], "ignored": [], "protected": []}
+
+--- a/sklearn/linear_model/_cd_fast.pyx
++++ b/sklearn/linear_model/_cd_fast.pyx
+@@ -180,6 +180,8 @@
+     const floating[::1, :] X,
+     const floating[::1] y,
+     const floating[::1] R,  # current residuals = y - X @ w
++    floating[::1] XtR,  # XtR = X.T @ R
++    bint compute_XtR,
+     floating[::1] XtA,  # XtA = X.T @ R - beta * w is calculated inplace
+     bint positive,
+     bint gap_smaller_eps,
+@@ -189,6 +191,9 @@
+     alpha > 0:            formulation A of the duality gap
+     alpha = 0 & beta > 0: formulation B of the duality gap
+     alpha = beta = 0:     OLS first order condition (=gradient)
++
++    compute_XtR: If 1 (True), calculate XtR = X.T @ R inplace. Else, XtR must already
++        hold X.T @ R for the current residuals R.
+ 
+     gap_smaller_eps: If 1 (True), set the dual gap to zero when the gap is around
+         machine precision compared to primal. As gap = primal - dual, we might get
+@@ -201,6 +206,7 @@
+     cdef floating Ry
+     cdef floating w_l1_norm
+     cdef floating w_l2_norm2 = 0.0
++    cdef int j
+ 
+     if floating is float:
+         eps = FLT_EPSILON
+@@ -216,12 +222,16 @@
+     if not (alpha == 0 and beta == 0):
+         Ry = _dot(n_samples, &R[0], 1, &y[0], 1)
+ 
++    if compute_XtR:
++        # XtR = X.T @ R
++        _gemv(
++            ColMajor, Trans, n_samples, n_features, 1.0, &X[0, 0],
++            n_samples, &R[0], 1, 0, &XtR[0], 1,
++        )
++
+     if alpha == 0:
+         # XtA = X.T @ R
+-        _gemv(
+-            ColMajor, Trans, n_samples, n_features, 1.0, &X[0, 0],
+-            n_samples, &R[0], 1, 0, &XtA[0], 1,
+-        )
++        _copy(n_features, &XtR[0], 1, &XtA[0], 1)
+         # ||X'R||_2^2
+         dual_norm_XtA = _dot(n_features, &XtA[0], 1, &XtA[0], 1)
+         if beta == 0:
+@@ -240,10 +250,8 @@
+         return gap, dual_norm_XtA
+ 
+     # XtA = X.T @ R - beta * w
+-    _copy(n_features, &w[0], 1, &XtA[0], 1)
+-    _gemv(ColMajor, Trans, n_samples, n_features, 1.0, &X[0, 0],
+-          n_samples, &R[0], 1,
+-          -beta, &XtA[0], 1)
++    for j in range(n_features):
++        XtA[j] = XtR[j] - beta * w[j]
+ 
+     # dual_norm_XtA
+     if positive:
+@@ -280,6 +288,9 @@
+     bint positive=0,
+     bint do_screening=1,
+     bint early_stopping=1,
++    const floating[::1] norm2_cols_X=None,
++    floating[::1] R=None,
++    floating[::1] XtR=None,
+ ):
+     """
+     Cython version of the coordinate descent algorithm for Elastic-Net regression.
+@@ -344,6 +355,21 @@
+     early_stopping : bint, default=1 (True)
+         If set to True, check for convergence (with the dual gap) before entering the
+         main iteration loop.
++    norm2_cols_X : ndarray of shape (n_features,), default=None
++        Squared norms of the columns of X, i.e. `np.square(X).sum(axis=0)`. If None,
++        they are computed from X.
++    R : ndarray of shape (n_samples,), default=None
++        Residuals `y - X @ w` for the passed `w`, e.g. from a previous call along a
++        regularization path. If given, they are only used for the convergence check
++        before the main loop. If coordinate updates are needed, the residuals are
++        first recomputed from y, X and w, such that rounding errors do not accumulate
++        over subsequent calls. It is updated inplace, such that on return it holds
++        the residuals of the returned `w`. If None, the residuals are computed from
++        y, X and w.
++    XtR : ndarray of shape (n_features,), default=None
++        `X.T @ R` for the passed residuals `R`. Only used if `R` is given. It is
++        updated inplace, such that on return it holds `X.T @ R` for the returned
++        residuals. If None, or if `R` is None, it is computed.
+ 
+     Returns
+     -------
+@@ -383,14 +409,19 @@
+     cdef unsigned int n_samples = X.shape[0]
+     cdef unsigned int n_features = X.shape[1]
+ 
+-    # compute squared norms of the columns of X
+-    # same as norm2_cols_X = np.square(X).sum(axis=0)
+-    cdef floating[::1] norm2_cols_X = np.einsum(
+-        "ij,ij->j", X, X, dtype=dtype, order="C"
+-    )
+-
+-    # initial value of the residuals
+-    cdef floating[::1] R = np.empty(n_samples, dtype=dtype)
++    if norm2_cols_X is None:
++        # compute squared norms of the columns of X
++        # same as norm2_cols_X = np.square(X).sum(axis=0)
++        norm2_cols_X = np.einsum("ij,ij->j", X, X, dtype=dtype, order="C")
++
++    # Only reuse the passed XtR = X.T @ R if the residuals are passed, too.
++    cdef bint compute_XtR = R is None or XtR is None
++    cdef bint compute_R = R is None
++    if compute_R:
++        # initial value of the residuals
++        R = np.empty(n_samples, dtype=dtype)
++    if XtR is None:
++        XtR = np.empty(n_features, dtype=dtype)
+     cdef floating[::1] XtA = np.empty(n_features, dtype=dtype)
+ 
+     cdef floating d_j
+@@ -422,10 +453,11 @@
+         excluded_set = np.empty(n_features, dtype=np.uint8)
+ 
+     with nogil:
+-        # R = y - np.dot(X, w)
+-        _copy(n_samples, &y[0], 1, &R[0], 1)
+-        _gemv(ColMajor, NoTrans, n_samples, n_features, -1.0, &X[0, 0],
+-              n_samples, &w[0], 1, 1.0, &R[0], 1)
++        if compute_R:
++            # R = y - np.dot(X, w)
++            _copy(n_samples, &y[0], 1, &R[0], 1)
++            _gemv(ColMajor, NoTrans, n_samples, n_features, -1.0, &X[0, 0],
++                  n_samples, &w[0], 1, 1.0, &R[0], 1)
+ 
+         # tol *= np.dot(y, y)
+         tol *= _dot(n_samples, &y[0], 1, &y[0], 1)
+@@ -433,12 +465,19 @@
+         # Check convergence before entering the main loop.
+         # We want to avoid stopping too early and set gap_smaller_eps=False.
+         gap, dual_norm_XtA = gap_enet(
+-            n_samples, n_features, w, alpha, beta, X, y, R, XtA, positive,
+-            gap_smaller_eps=False,
++            n_samples, n_features, w, alpha, beta, X, y, R, XtR, compute_XtR, XtA,
++            positive, gap_smaller_eps=False,
+         )
+         if early_stopping and gap <= tol:
+             with gil:
+                 return np.asarray(w), gap, tol, 0
++
++        if not compute_R:
++            # Recompute the passed residuals, R = y - np.dot(X, w), to not carry
++            # over their rounding errors into the coordinate updates.
++            _copy(n_samples, &y[0], 1, &R[0], 1)
++            _gemv(ColMajor, NoTrans, n_samples, n_features, -1.0, &X[0, 0],
++                  n_samples, &w[0], 1, 1.0, &R[0], 1)
+ 
+         # Gap Safe Screening Rules, see https://arxiv.org/abs/1802.07481, Eq. 11
+         if do_screening:
+@@ -510,8 +549,8 @@
+                 # only because of floating point arithmetic, and therefore set
+                 # gap_smaller_eps=True.
+                 gap, dual_norm_XtA = gap_enet(
+-                    n_samples, n_features, w, alpha, beta, X, y, R, XtA, positive,
+-                    gap_smaller_eps=True,
++                    n_samples, n_features, w, alpha, beta, X, y, R, XtR, True, XtA,
++                    positive, gap_smaller_eps=True,
+                 )
+                 if gap <= tol:
+                     # return if we reached desired tolerance
+@@ -539,6 +578,13 @@
+ 
+         else:
+             # for/else, runs if for doesn't end with a `break`
++            if do_screening:
++                # The screening after the last gap computation might have changed R.
++                # XtR = X.T @ R
++                _gemv(
++                    ColMajor, Trans, n_samples, n_features, 1.0, &X[0, 0],
++                    n_samples, &R[0], 1, 0, &XtR[0], 1,
++                )
+             with gil:
+                 message = (
+                     message_conv +
+@@ -603,6 +649,8 @@
+     bint center,
+     const floating[::1] R,  # current residuals = y - X @ w
+     floating R_sum,
++    floating[::1] XtR,  # XtR = X.T @ R, with X not centered
++    bint compute_XtR,
+     floating[::1] XtA,  # XtA = X.T @ R - beta * w is calculated inplace
+     bint positive,
+     bint gap_smaller_eps,
+@@ -612,6 +660,9 @@
+     alpha > 0:            formulation A of the duality gap
+     alpha = 0 & beta > 0: formulation B of the duality gap
+     alpha = beta = 0:     OLS first order condition (=gradient)
++
++    compute_XtR: If 1 (True), calculate XtR = X.T @ R inplace. Else, XtR must already
++        hold X.T @ R for the current residuals R.
+     """
+     cdef floating gap, primal, dual
+     cdef floating dual_norm_XtA
+@@ -619,7 +670,7 @@
+     cdef floating Ry
+     cdef floating w_l1_norm
+     cdef floating w_l2_norm2 = 0.0
+-    cdef int32_t i, i_ind, j
++    cdef int32_t i, j
+ 
+     if floating is float:
+         eps = FLT_EPSILON
+@@ -644,14 +695,15 @@
+         # Ry = (sw * R) @ y, as it should be.
+         Ry = _dot(n_samples, &R[0], 1, &y[0], 1)
+ 
++    if compute_XtR:
++        # sparse X.T @ dense R
++        for j in range(n_features):
++            XtR[j] = sparse_dot(j, X_data, X_indices, X_indptr, R)
++
+     if alpha == 0:
+         # XtA = X.T @ R
+         for j in range(n_features):
+-            XtA[j] = 0.0
+-            for i_ind in range(X_indptr[j], X_indptr[j + 1]):
+-                i = X_indices[i_ind]
+-                XtA[j] += X_data[i_ind] * R[i]
+-
++            XtA[j] = XtR[j]
+             if center:
+                 XtA[j] -= X_mean[j] * R_sum
+         # ||X'R||_2^2
+@@ -672,13 +724,8 @@
+         return gap, dual_norm_XtA
+ 
+     # XtA = X.T @ R - beta * w
+-    # sparse X.T @ dense R
+     for j in range(n_features):
+-        XtA[j] = 0.0
+-        for i_ind in range(X_indptr[j], X_indptr[j + 1]):
+-            i = X_indices[i_ind]
+-            XtA[j] += X_data[i_ind] * R[i]
+-
++        XtA[j] = XtR[j]
+         if center:
+             XtA[j] -= X_mean[j] * R_sum
+         XtA[j] -= beta * w[j]
+@@ -722,6 +769,9 @@
+     bint positive=0,
+     bint do_screening=1,
+     bint early_stopping=1,
++    const floating[::1] norm2_cols_X=None,
++    floating[::1] R=None,
++    floating[::1] XtR=None,
+ ):
+     """Cython version of the coordinate descent algorithm for Elastic-Net
+ 
+@@ -738,6 +788,23 @@
+     and X_mean is the weighted average of X (per column).
+ 
+     The rest is the same as enet_coordinate_descent, but for sparse X.
++
++    Further Parameters
++    ------------------
++    norm2_cols_X : ndarray of shape (n_features,), default=None
++        Weighted squared norms of the columns of Z, i.e.
++        `np.sum(sample_weight * (X - X_mean)**2, axis=0)`. If None, they are computed
++        from X, X_mean and sample_weight.
++    R : ndarray of shape (n_samples,), default=None
++        Weighted residuals `sample_weight * (y - Z @ w)` for the passed `w`. It is
++        updated inplace, such that on return it holds the residuals of the returned
++        `w`. This allows to pass it on to a subsequent call, e.g. along a
++        regularization path. If None, the residuals are computed from y, X, X_mean,
++        sample_weight and w.
++    XtR : ndarray of shape (n_features,), default=None
++        `X.T @ R` with the not centered X for the passed residuals `R`. Only used if
++        `R` is given. It is updated inplace, such that on return it holds `X.T @ R`
++        for the returned residuals. If None, or if `R` is None, it is computed.
+ 
+     Returns
+     -------
+@@ -769,12 +836,20 @@
+     cdef unsigned int n_samples = y.shape[0]
+     cdef unsigned int n_features = w.shape[0]
+ 
+-    # compute squared norms of the columns of X
+-    cdef floating[::1] norm2_cols_X = np.zeros(n_features, dtype=dtype)
++    cdef bint compute_norm2_cols_X = norm2_cols_X is None
++    cdef floating[::1] norm2_cols_X_out
++    if compute_norm2_cols_X:
++        # compute squared norms of the columns of X
++        norm2_cols_X_out = np.zeros(n_features, dtype=dtype)
++        norm2_cols_X = norm2_cols_X_out
+ 
+     # initial value of the residuals
+     # R = y - Zw, weighted version R = sample_weight * (y - Zw)
+-    cdef floating[::1] R
++    cdef bint compute_R = R is None
++    # Only reuse the passed XtR = X.T @ R if the residuals are passed, too.
++    cdef bint compute_XtR = compute_R or XtR is None
++    if XtR is None:
++        XtR = np.empty(n_features, dtype=dtype)
+     cdef floating[::1] XtA = np.empty(n_features, dtype=dtype)
+     cdef const floating[::1] yw
+ 
+@@ -816,10 +891,12 @@
+ 
+     if no_sample_weights:
+         yw = y
+-        R = y.copy()
++        if compute_R:
++            R = y.copy()
+     else:
+         yw = np.multiply(sample_weight, y)
+-        R = yw.copy()
++        if compute_R:
++            R = yw.copy()
+ 
+     with nogil:
+         # center = (X_mean != 0).any()
+@@ -828,40 +905,63 @@
+                 center = True
+                 break
+ 
+-        # R = y - np.dot(X, w)
+-        for j in range(n_features):
+-            X_mean_j = X_mean[j]
+-            endptr = X_indptr[j + 1]
+-            normalize_sum = 0.0
+-            w_j = w[j]
+-
+-            if no_sample_weights:
+-                for i_ind in range(startptr, endptr):
+-                    i = X_indices[i_ind]
+-                    normalize_sum += (X_data[i_ind] - X_mean_j) ** 2
+-                    R[i] -= X_data[i_ind] * w_j
+-                norm2_cols_X[j] = normalize_sum
+-                if center:
+-                    norm2_cols_X[j] += (n_samples - endptr + startptr) * X_mean_j ** 2
+-                    for i in range(n_samples):
+-                        R[i] += X_mean_j * w_j
+-                        R_sum += R[i]
+-            else:
+-                # R = sw * (y - np.dot(X, w))
+-                for i_ind in range(startptr, endptr):
+-                    i = X_indices[i_ind]
+-                    tmp = sample_weight[i]
+-                    # second term will be subtracted by loop over range(n_samples)
+-                    normalize_sum += (tmp * (X_data[i_ind] - X_mean_j) ** 2
+-                                      - tmp * X_mean_j ** 2)
+-                    R[i] -= tmp * X_data[i_ind] * w_j
+-                if center:
+-                    for i in range(n_samples):
+-                        normalize_sum += sample_weight[i] * X_mean_j ** 2
+-                        R[i] += sample_weight[i] * X_mean_j * w_j
+-                        R_sum += R[i]
+-                norm2_cols_X[j] = normalize_sum
+-            startptr = endptr
++        if compute_norm2_cols_X:
++            for j in range(n_features):
++                X_mean_j = X_mean[j]
++                endptr = X_indptr[j + 1]
++                normalize_sum = 0.0
++
++                if no_sample_weights:
++                    for i_ind in range(startptr, endptr):
++                        normalize_sum += (X_data[i_ind] - X_mean_j) ** 2
++                    norm2_cols_X_out[j] = normalize_sum
++                    if center:
++                        norm2_cols_X_out[j] += (
++                            (n_samples - endptr + startptr) * X_mean_j ** 2
++                        )
++                else:
++                    for i_ind in range(startptr, endptr):
++                        i = X_indices[i_ind]
++                        tmp = sample_weight[i]
++                        # second term will be subtracted by loop over range(n_samples)
++                        normalize_sum += (tmp * (X_data[i_ind] - X_mean_j) ** 2
++                                          - tmp * X_mean_j ** 2)
++                    if center:
++                        for i in range(n_samples):
++                            normalize_sum += sample_weight[i] * X_mean_j ** 2
++                    norm2_cols_X_out[j] = normalize_sum
++                startptr = endptr
++
++        if compute_R:
++            # R = y - np.dot(X, w)
++            startptr = X_indptr[0]
++            for j in range(n_features):
++                X_mean_j = X_mean[j]
++                endptr = X_indptr[j + 1]
++                w_j = w[j]
++
++                if no_sample_weights:
++                    for i_ind in range(startptr, endptr):
++                        i = X_indices[i_ind]
++                        R[i] -= X_data[i_ind] * w_j
++                    if center:
++                        for i in range(n_samples):
++                            R[i] += X_mean_j * w_j
++                            R_sum += R[i]
++                else:
++                    # R = sw * (y - np.dot(X, w))
++                    for i_ind in range(startptr, endptr):
++                        i = X_indices[i_ind]
++                        R[i] -= sample_weight[i] * X_data[i_ind] * w_j
++                    if center:
++                        for i in range(n_samples):
++                            R[i] += sample_weight[i] * X_mean_j * w_j
++                            R_sum += R[i]
++                startptr = endptr
++        elif center:
++            # R_sum = np.sum(R)
++            for i in range(n_samples):
++                R_sum += R[i]
+ 
+         # Note: No need to update R_sum from here on because the update terms cancel
+         # each other: w_j * np.sum(X[:,j] - X_mean[j]) = 0. R_sum is only ever
+@@ -889,6 +989,8 @@
+             center,
+             R,
+             R_sum,
++            XtR,
++            compute_XtR,
+             XtA,
+             positive,
+             gap_smaller_eps=False,
+@@ -1016,6 +1118,8 @@
+                     center,
+                     R,
+                     R_sum,
++                    XtR,
++                    True,
+                     XtA,
+                     positive,
+                     gap_smaller_eps=True,
+@@ -1059,6 +1163,10 @@
+ 
+         else:
+             # for/else, runs if for doesn't end with a `break`
++            if do_screening:
++                # The screening after the last gap computation might have changed R.
++                for j in range(n_features):
++                    XtR[j] = sparse_dot(j, X_data, X_indices, X_indptr, R)
+             with gil:
+                 message = (
+                     message_conv +
+@@ -1179,6 +1287,7 @@
+     bint positive=0,
+     bint do_screening=1,
+     bint early_stopping=1,
++    floating[::1] Qw=None,
+ ):
+     """Cython version of the coordinate descent algorithm
+         for Elastic-Net regression
+@@ -1191,6 +1300,13 @@
+         which amount to the Elastic-Net problem when:
+         Q = X^T X (Gram matrix)
+         q = X^T y
++
++    Further Parameters
++    ------------------
++    Qw : ndarray of shape (n_features,), default=None
++        `Q @ w` for the passed `w`. It is updated inplace, such that on return it
++        holds `Q @ w` for the returned `w`. This allows to pass it on to a subsequent
++        call, e.g. along a regularization path. If None, it is computed from Q and w.
+ 
+     Returns
+     -------
+@@ -1212,8 +1328,9 @@
+     # get the data information into easy vars
+     cdef unsigned int n_features = Q.shape[0]
+ 
+-    # initial value "Q w" which will be kept of up to date in the iterations
+-    cdef floating[::1] Qw = np.dot(Q, w)
++    if Qw is None:
++        # initial value "Q w" which will be kept of up to date in the iterations
++        Qw = np.dot(Q, w)
+     cdef floating[::1] XtA = np.zeros(n_features, dtype=dtype)
+     cdef floating y_norm2 = np.dot(y, y)
+ 
+@@ -1378,6 +1495,29 @@
+     return np.asarray(w), gap, tol, n_iter + 1
+ 
+ 
++cdef void multi_task_XtR(
++    int n_samples,
++    int n_features,
++    int n_tasks,
++    const floating[::1, :] X,
++    bint X_is_sparse,
++    const floating[::1] X_data,
++    const int32_t[::1] X_indices,
++    const int32_t[::1] X_indptr,
++    const floating[::1, :] R,
++    floating[:, ::1] XtR,  # out
++) noexcept nogil:
++    """XtR = X.T @ R for dense or sparse X (not centered) and R of shape
++    (n_samples, n_tasks)."""
++    cdef unsigned int t, j
++    for j in range(n_features):
++        for t in range(n_tasks):
++            if not X_is_sparse:
++                XtR[j, t] = _dot(n_samples, &X[0, j], 1, &R[0, t], 1)
++            else:
++                XtR[j, t] = sparse_dot(j, X_data, X_indices, X_indptr, R[:, t])
++
++
+ cdef (floating, floating) gap_enet_multi_task(
+     int n_samples,
+     int n_features,
+@@ -1397,6 +1537,8 @@
+     bint center,
+     const floating[::1, :] R,  # current residuals = y - X @ w
+     const floating[::1] R_sum,
++    floating[:, ::1] XtR,  # in or out
++    bint compute_XtR,
+     floating[:, ::1] XtA,  # out
+     floating[::1] XtA_row_norms,  # out
+     bint gap_smaller_eps,
+@@ -1410,6 +1552,10 @@
+     Y : memoryview of shape (n_samples, n_tasks)
+     R : memoryview of shape (n_samples, n_tasks)
+         Current residuals = Y - X @ W.T
++    XtR : memoryview of shape (n_features, n_tasks)
++        X.T @ R, for sparse X with the not centered X. Inplace calculated if
++        compute_XtR is 1 (True), else it must already hold X.T @ R for the current
++        residuals R.
+     XtA : memoryview of shape (n_features, n_tasks)
+         Inplace calculated as XtA = X.T @ R - beta * W.T
+     XtA_row_norms : memoryview of shape n_features
+@@ -1448,16 +1594,19 @@
+         # Ry = (sw * R) @ y, as it should be.
+         Ry = _dot(n_samples * n_tasks, &R[0, 0], 1, &Y[0, 0], 1)
+ 
++    if compute_XtR:
++        multi_task_XtR(
++            n_samples, n_features, n_tasks, X, X_is_sparse, X_data, X_indices,
++            X_indptr, R, XtR,
++        )
++
+     if alpha == 0:
+         # XtA = X.T @ R
+         for j in range(n_features):
+             for t in range(n_tasks):
+-                if not X_is_sparse:
+-                    XtA[j, t] = _dot(n_samples, &X[0, j], 1, &R[0, t], 1)
+-                else:
+-                    XtA[j, t] = sparse_dot(j, X_data, X_indices, X_indptr, R[:, t])
+-                    if center:
+-                        XtA[j, t] -= X_mean[j] * R_sum[t]
++                XtA[j, t] = XtR[j, t]
++                if X_is_sparse and center:
++                    XtA[j, t] -= X_mean[j] * R_sum[t]
+         # ||X'R||_2^2
+         dual_norm_XtA = _dot(n_features * n_tasks, &XtA[0, 0], 1, &XtA[0, 0], 1)
+         if beta == 0:
+@@ -1479,9 +1628,9 @@
+     for j in range(n_features):
+         for t in range(n_tasks):
+             if not X_is_sparse:
+-                XtA[j, t] = _dot(n_samples, &X[0, j], 1, &R[0, t], 1) - beta * W[t, j]
++                XtA[j, t] = XtR[j, t] - beta * W[t, j]
+             else:
+-                XtA[j, t] = sparse_dot(j, X_data, X_indices, X_indptr, R[:, t])
++                XtA[j, t] = XtR[j, t]
+                 if center:
+                     XtA[j, t] -= X_mean[j] * R_sum[t]
+                 XtA[j, t] -= beta * W[t, j]
+@@ -1530,6 +1679,9 @@
+     bint random=0,
+     bint do_screening=1,
+     bint early_stopping=1,
++    const floating[::1] norm2_cols_X=None,
++    floating[::1, :] R=None,
++    floating[:, ::1] XtR=None,
+ ):
+     """Cython version of the coordinate descent algorithm
+         for Elastic-Net multi-task regression
+@@ -1543,6 +1695,27 @@
+     A Blockwise Descent Algorithm for Group-penalized Multiresponse and Multinomial
+     Regression
+     https://doi.org/10.48550/arXiv.1311.6529
++
++    Further Parameters
++    ------------------
++    norm2_cols_X : ndarray of shape (n_features,), default=None
++        Squared norms of the columns of X, i.e. `np.square(X).sum(axis=0)`. For
++        sparse X, the weighted squared norms of the centered columns, i.e.
++        `np.sum(sample_weight * (X - X_mean)**2, axis=0)`. If None, they are computed.
++    R : ndarray of shape (n_samples, n_tasks), Fortran-contiguous, default=None
++        Residuals `Y - X @ W.T` for the passed `W`. For sparse X, the weighted
++        residuals of the centered X, i.e. `sample_weight * (Y - (X - X_mean) @ W.T)`.
++        This allows to pass them on from a previous call, e.g. along a regularization
++        path. For dense X, they are only used for the convergence check before the
++        main loop: if coordinate updates are needed, the residuals are first
++        recomputed from Y, X and W, such that rounding errors do not accumulate over
++        subsequent calls. It is updated inplace, such that on return it holds the
++        residuals of the returned `W`. If None, the residuals are computed.
++    XtR : ndarray of shape (n_features, n_tasks), C-contiguous, default=None
++        `X.T @ R` for the passed residuals `R`, for sparse X with the not centered X.
++        Only used if `R` is given. It is updated inplace, such that on return it holds
++        `X.T @ R` for the returned residuals. If None, or if `R` is None, it is
++        computed.
+ 
+     Returns
+     -------
+@@ -1575,12 +1748,20 @@
+     cdef unsigned int n_features = W.shape[1]
+     cdef unsigned int n_tasks = Y.shape[1]
+ 
+-    # compute squared norms of the columns of X
+-    norm2_cols_X_array = np.empty(shape=n_features, dtype=dtype)
+-    cdef floating[::1] norm2_cols_X = norm2_cols_X_array
+-
+-    # initial value of the residuals
+-    cdef floating[::1, :] R  # shape (n_samples, n_tasks)
++    cdef bint compute_norm2_cols_X = norm2_cols_X is None
++    cdef floating[::1] norm2_cols_X_out
++    if compute_norm2_cols_X:
++        # compute squared norms of the columns of X
++        norm2_cols_X_array = np.empty(shape=n_features, dtype=dtype)
++        norm2_cols_X_out = norm2_cols_X_array
++        norm2_cols_X = norm2_cols_X_out
++
++    # initial value of the residuals, shape (n_samples, n_tasks)
++    cdef bint compute_R = R is None
++    # Only reuse the passed XtR = X.T @ R if the residuals are passed, too.
++    cdef bint compute_XtR = compute_R or XtR is None
++    if XtR is None:
++        XtR = np.empty((n_features, n_tasks), dtype=dtype)
+     cdef floating[:, ::1] XtA = np.empty((n_features, n_tasks), dtype=dtype)
+     cdef floating[::1] XtA_row_norms = np.empty(n_features, dtype=dtype)
+     cdef const floating[::1, :] Yw
+@@ -1622,10 +1803,12 @@
+ 
+     if no_sample_weights or not X_is_sparse:
+         Yw = Y
+-        R = np.copy(Y, order="F")
++        if compute_R:
++            R = np.copy(Y, order="F")
+     else:
+         Yw = np.multiply(sample_weight[:, None], Y)
+-        R = np.copy(Yw, order="F")
++        if compute_R:
++            R = np.copy(Yw, order="F")
+ 
+     if X_is_sparse:
+         R_sum = np.zeros(n_tasks, dtype=dtype)
+@@ -1635,60 +1818,69 @@
+                 center = True
+                 break
+ 
+-    # compute squared norms of the columns of X
+-    # same as norm2_cols_X = np.square(X).sum(axis=0)
+-    if not X_is_sparse:
+-        np.einsum("ij,ij->j", X, X, dtype=dtype, out=norm2_cols_X_array)
+-    else:
+-        for j in range(n_features):
+-            norm2_cols_X[j] = 0
+-            startptr = X_indptr[j]
+-            endptr = X_indptr[j + 1]
+-            if no_sample_weights:
+-                for i_ind in range(startptr, endptr):
+-                    norm2_cols_X[j] += (X_data[i_ind] - X_mean[j]) ** 2
+-                if center:
+-                    norm2_cols_X[j] += (n_samples - endptr + startptr) * X_mean[j] ** 2
+-            else:
+-                for i_ind in range(startptr, endptr):
+-                    i = X_indices[i_ind]
+-                    norm2_cols_X[j] += sample_weight[i] * (
+-                        (X_data[i_ind] - X_mean[j]) ** 2 - X_mean[j] ** 2
+-                    )
+-                if center:
+-                    for i in range(n_samples):
+-                        norm2_cols_X[j] += sample_weight[i] * X_mean[j] ** 2
++    if compute_norm2_cols_X:
++        # compute squared norms of the columns of X
++        # same as norm2_cols_X = np.square(X).sum(axis=0)
++        if not X_is_sparse:
++            np.einsum("ij,ij->j", X, X, dtype=dtype, out=norm2_cols_X_array)
++        else:
++            for j in range(n_features):
++                norm2_cols_X_out[j] = 0
++                startptr = X_indptr[j]
++                endptr = X_indptr[j + 1]
++                if no_sample_weights:
++                    for i_ind in range(startptr, endptr):
++                        norm2_cols_X_out[j] += (X_data[i_ind] - X_mean[j]) ** 2
++                    if center:
++                        norm2_cols_X_out[j] += (n_samples - endptr + startptr) * X_mean[j] ** 2
++                else:
++                    for i_ind in range(startptr, endptr):
++                        i = X_indices[i_ind]
++                        norm2_cols_X_out[j] += sample_weight[i] * (
++                            (X_data[i_ind] - X_mean[j]) ** 2 - X_mean[j] ** 2
++                        )
++                    if center:
++                        for i in range(n_samples):
++                            norm2_cols_X_out[j] += sample_weight[i] * X_mean[j] ** 2
+ 
+     with nogil:
+-        # R = Y - X @ W.T
+-        # R = Y was already set above.
+-        for j in range(n_features):
++        if compute_R:
++            # R = Y - X @ W.T
++            # R = Y was already set above.
++            for j in range(n_features):
++                for t in range(n_tasks):
++                    if W[t, j] != 0:
++                        if not X_is_sparse:
++                            _axpy(n_samples, -W[t, j], &X[0, j], 1, &R[0, t], 1)
++                        else:
++                            if no_sample_weights:
++                                sparse_axpy(
++                                    j, -W[t, j], X_data, X_indices, X_indptr, R[:, t]
++                                )
++                            else:
++                                startptr = X_indptr[j]
++                                endptr = X_indptr[j + 1]
++                                for i_ind in range(startptr, endptr):
++                                    i = X_indices[i_ind]
++                                    R[i, t] -= sample_weight[i] * X_data[i_ind] * W[t, j]
++
++                if X_is_sparse and center:
++                    # R = Y - (X - X_mean) @ W.T
++                    if no_sample_weights:
++                        for i in range(n_samples):
++                            for t in range(n_tasks):
++                                R[i, t] += X_mean[j] * W[t, j]
++                                R_sum[t] += R[i, t]
++                    else:
++                        for i in range(n_samples):
++                            for t in range(n_tasks):
++                                R[i, t] += sample_weight[i] * X_mean[j] * W[t, j]
++                                R_sum[t] += R[i, t]
++        elif X_is_sparse and center:
++            # R_sum = np.sum(R, axis=0)
+             for t in range(n_tasks):
+-                if W[t, j] != 0:
+-                    if not X_is_sparse:
+-                        _axpy(n_samples, -W[t, j], &X[0, j], 1, &R[0, t], 1)
+-                    else:
+-                        if no_sample_weights:
+-                            sparse_axpy(j, -W[t, j], X_data, X_indices, X_indptr, R[:, t])
+-                        else:
+-                            startptr = X_indptr[j]
+-                            endptr = X_indptr[j + 1]
+-                            for i_ind in range(startptr, endptr):
+-                                i = X_indices[i_ind]
+-                                R[i, t] -= sample_weight[i] * X_data[i_ind] * W[t, j]
+-
+-            if X_is_sparse and center:
+-                # R = Y - (X - X_mean) @ W.T
+-                if no_sample_weights:
+-                    for i in range(n_samples):
+-                        for t in range(n_tasks):
+-                            R[i, t] += X_mean[j] * W[t, j]
+-                            R_sum[t] += R[i, t]
+-                else:
+-                    for i in range(n_samples):
+-                        for t in range(n_tasks):
+-                            R[i, t] += sample_weight[i] * X_mean[j] * W[t, j]
+-                            R_sum[t] += R[i, t]
++                for i in range(n_samples):
++                    R_sum[t] += R[i, t]
+ 
+         # Note: No need to update R_sum from here on because the update terms cancel
+         # each other: w_j[t] * np.sum(X[:,j] - X_mean[j]) = 0. R_sum is only ever
+@@ -1719,6 +1911,8 @@
+             center=center,
+             R=R,
+             R_sum=R_sum,
++            XtR=XtR,
++            compute_XtR=compute_XtR,
+             XtA=XtA,
+             XtA_row_norms=XtA_row_norms,
+             gap_smaller_eps=False,
+@@ -1726,6 +1920,15 @@
+         if early_stopping and gap <= tol:
+             with gil:
+                 return np.asarray(W), gap, tol, 0
++
++        if not compute_R and not X_is_sparse:
++            # Recompute the passed residuals, R = Y - X @ W.T, to not carry over their
++            # rounding errors into the coordinate updates.
++            _copy(n_samples * n_tasks, &Y[0, 0], 1, &R[0, 0], 1)
++            for j in range(n_features):
++                for t in range(n_tasks):
++                    if W[t, j] != 0:
++                        _axpy(n_samples, -W[t, j], &X[0, j], 1, &R[0, t], 1)
+ 
+         # Gap Safe Screening Rules for multi-task Lasso, see
+         # https://arxiv.org/abs/1703.07285 Eq 2.2. (also arxiv:1506.03736)
+@@ -1880,6 +2083,8 @@
+                     center=center,
+                     R=R,
+                     R_sum=R_sum,
++                    XtR=XtR,
++                    compute_XtR=True,
+                     XtA=XtA,
+                     XtA_row_norms=XtA_row_norms,
+                     gap_smaller_eps=True,
+@@ -1928,6 +2133,12 @@
+ 
+         else:
+             # for/else, runs if for doesn't end with a `break`
++            if do_screening:
++                # The screening after the last gap computation might have changed R.
++                multi_task_XtR(
++                    n_samples, n_features, n_tasks, X, X_is_sparse, X_data,
++                    X_indices, X_indptr, R, XtR,
++                )
+             with gil:
+                 message = (
+                     message_conv +
+--- a/sklearn/linear_model/_coordinate_descent.py
++++ b/sklearn/linear_model/_coordinate_descent.py
+@@ -101,6 +101,45 @@
+         else:
+             y = np.asarray(y, order=order)
+     return X, y
++
++
++def _sparse_norm2_cols(X, X_mean, sample_weight):
++    """Squared norms of the columns of the centered sparse X.
++
++    Parameters
++    ----------
++    X : sparse matrix of shape (n_samples, n_features) in CSC format
++        Training data.
++
++    X_mean : ndarray of shape (n_features,)
++        Center of the columns of X.
++
++    sample_weight : None or ndarray of shape (n_samples,)
++        Sample weights. If None, all samples have weight one.
++
++    Returns
++    -------
++    norm2_cols_X : ndarray of shape (n_features,)
++        `np.sum(sample_weight * (X - X_mean)**2, axis=0)`, computed without
++        densifying X.
++    """
++    n_samples, n_features = X.shape
++    nnz_cols = np.diff(X.indptr)
++    cols = np.repeat(np.arange(n_features), nnz_cols)  # column of each nonzero
++    X_mean_nz = X_mean[cols]
++    # The zero entries of column j contribute X_mean[j] ** 2 each.
++    if sample_weight is None:
++        norm2_cols_X = np.bincount(
++            cols, weights=(X.data - X_mean_nz) ** 2, minlength=n_features
++        ) + (n_samples - nnz_cols) * X_mean**2
++    else:
++        norm2_cols_X = np.bincount(
++            cols,
++            weights=sample_weight[X.indices]
++            * ((X.data - X_mean_nz) ** 2 - X_mean_nz**2),
++            minlength=n_features,
++        ) + np.sum(sample_weight) * X_mean**2
++    return norm2_cols_X.astype(X.dtype, copy=False)
+ 
+ 
+ ###############################################################################
+@@ -809,6 +848,46 @@
+         do_screening=do_screening,
+         early_stopping=early_stopping,
+     )
++
++    # Along the path, each solver call is warm started with the coefficients of the
++    # previous alpha. Quantities that only depend on the data (column norms) or on the
++    # data and the coefficients (residuals R, X.T @ R and Gram @ coef) are therefore
++    # computed once and passed to every call. The solver keeps the latter up to date
++    # for the next call.
++    if n_alphas > 1:
++        if algo == CD_Algo.ENET_CD:
++            params["norm2_cols_X"] = np.einsum(
++                "ij,ij->j", X, X, dtype=X.dtype, order="C"
++            )
++            params["R"] = y - X @ coef_
++            params["XtR"] = X.T @ params["R"]
++        elif algo == CD_Algo.ENET_CD_GRAM:
++            params["Qw"] = precompute @ coef_
++        elif algo == CD_Algo.ENET_CD_SPARSE:
++            params["norm2_cols_X"] = _sparse_norm2_cols(
++                X, X_sparse_scaling, sample_weight
++            )
++            # weighted residuals of the centered X
++            params["R"] = y - X @ coef_ + X_sparse_scaling @ coef_
++            if sample_weight is not None:
++                params["R"] *= sample_weight
++            params["XtR"] = X.T @ params["R"]  # with the not centered X
++        elif X_is_sparse:  # CD_Algo.ENET_CD_MULTITASK
++            params["norm2_cols_X"] = _sparse_norm2_cols(
++                X, X_sparse_scaling, sample_weight
++            )
++            # weighted residuals of the centered X
++            R = y - X @ coef_.T + X_sparse_scaling @ coef_.T
++            if sample_weight is not None:
++                R *= sample_weight[:, None]
++            params["R"] = np.asfortranarray(R)
++            params["XtR"] = np.ascontiguousarray(X.T @ R)  # with the not centered X
++        else:  # CD_Algo.ENET_CD_MULTITASK
++            params["norm2_cols_X"] = np.einsum(
++                "ij,ij->j", X, X, dtype=X.dtype, order="C"
++            )
++            params["R"] = np.asfortranarray(y - X @ coef_.T)
++            params["XtR"] = np.ascontiguousarray(X.T @ params["R"])
+ 
+     for i, alpha in enumerate(alphas):
+         # account for n_samples scaling in objectives between here and cd_fast

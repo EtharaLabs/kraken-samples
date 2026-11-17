@@ -1,0 +1,49 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -13,6 +13,7 @@
+ import pandas as pd
+ from scipy import stats
+ from scipy.interpolate import interp1d
++from scipy.linalg import qr, solve_triangular
+ from scipy.signal import correlate
+ 
+ from statsmodels.regression.linear_model import OLS, yule_walker
+@@ -4067,6 +4068,26 @@
+         }
+         return pvalue, cvdict
+ 
++    def _qr_tvalue(self, endog, exog, col):
++        """
++        t-statistic of one coefficient from a column-pivoted QR fit
++
++        Falls back to ``_quick_ols`` when the pivoted factor is rank deficient,
++        so singular designs behave as before.
++        """
++        nobs, k_exog = exog.shape
++        q, r, piv = qr(exog, mode="economic", pivoting=True)
++        diag = np.abs(np.diag(r))
++        if not np.all(np.isfinite(r)) or diag[-1] <= max(nobs, k_exog) * np.finfo(float).eps * diag[0]:
++            return self._quick_ols(endog, exog)[col]
++        coef = np.empty(k_exog)
++        coef[piv] = solve_triangular(r, q.T @ endog)
++        resid = endog - exog @ coef
++        sigma2 = resid @ resid / (nobs - k_exog)
++        rinv = solve_triangular(r, np.eye(k_exog))
++        pos = int(np.flatnonzero(piv == col)[0])
++        return coef[col] / np.sqrt(sigma2 * (rinv[pos] @ rinv[pos]))
++
+     def _quick_ols(self, endog, exog):
+         """
+         Minimal implementation of LS estimator for internal use
+@@ -4311,9 +4332,9 @@
+                         "ZA: auxiliary exog matrix is not full rank.\n"
+                         f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
+                     )
+-                stats[bp] = o.tvalues[basecols - 1]
++                stats[bp] = self._qr_tvalue(endog[baselags:], exog, basecols - 1)
+             else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                stats[bp] = self._qr_tvalue(endog[baselags:], exog, basecols - 1)
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

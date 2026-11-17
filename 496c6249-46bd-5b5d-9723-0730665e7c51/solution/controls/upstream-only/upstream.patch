@@ -1,0 +1,157 @@
+diff --git a/numpy/_core/src/multiarray/stringdtype/dtype.c b/numpy/_core/src/multiarray/stringdtype/dtype.c
+index abe38acd81b9..3727e083b5b1 100644
+--- a/numpy/_core/src/multiarray/stringdtype/dtype.c
++++ b/numpy/_core/src/multiarray/stringdtype/dtype.c
+@@ -971,12 +971,30 @@ static PyMethodDef PyArray_StringDType_methods[] = {
+         {NULL, NULL, 0, NULL},
+ };
+ 
++static PyObject *
++stringdtype_has_na(PyArray_StringDTypeObject *self, void *NPY_UNUSED(ignored))
++{
++    return PyBool_FromLong(self->na_object != NULL);
++}
++
++static PyGetSetDef PyArray_StringDType_getset[] = {
++        {"_has_na", (getter)stringdtype_has_na, NULL,
++         "Whether a missing value object is configured", NULL},
++        {NULL, NULL, NULL, NULL, NULL},
++};
++
+ static PyMemberDef PyArray_StringDType_members[] = {
+         {"na_object", T_OBJECT_EX, offsetof(PyArray_StringDTypeObject, na_object),
+          READONLY,
+          "The missing value object associated with the dtype instance"},
+         {"coerce", T_BOOL, offsetof(PyArray_StringDTypeObject, coerce), READONLY,
+          "Controls hether non-string values should be coerced to string"},
++        {"_has_nan_na", T_BOOL,
++         offsetof(PyArray_StringDTypeObject, has_nan_na), READONLY,
++         "Whether the missing value object has NaN-like semantics"},
++        {"_has_string_na", T_BOOL,
++         offsetof(PyArray_StringDTypeObject, has_string_na), READONLY,
++         "Whether the missing value object is a string"},
+         {NULL, 0, 0, 0, NULL},
+ };
+ 
+@@ -1063,6 +1081,7 @@ PyArray_DTypeMeta PyArray_StringDType = {
+                 .tp_str = (reprfunc)stringdtype_repr,
+                 .tp_methods = PyArray_StringDType_methods,
+                 .tp_members = PyArray_StringDType_members,
++                .tp_getset = PyArray_StringDType_getset,
+                 .tp_richcompare = PyArray_StringDType_richcompare,
+                 .tp_hash = PyArray_StringDType_hash,
+         }},
+diff --git a/numpy/dtypes.pyi b/numpy/dtypes.pyi
+index 72ecb24ec8f4..017a6be94700 100644
+--- a/numpy/dtypes.pyi
++++ b/numpy/dtypes.pyi
+@@ -588,6 +588,12 @@ class StringDType(  # type: ignore[misc]
+     def na_object(self) -> _NaObjectT_co: ...
+     @property
+     def coerce(self) -> L[True]: ...
++    @property
++    def _has_na(self) -> bool: ...
++    @property
++    def _has_nan_na(self) -> bool: ...
++    @property
++    def _has_string_na(self) -> bool: ...
+ 
+     #
+     @overload
+diff --git a/numpy/lib/_arraysetops_impl.py b/numpy/lib/_arraysetops_impl.py
+index c7fa5b47e5b6..e1950b1f5eff 100644
+--- a/numpy/lib/_arraysetops_impl.py
++++ b/numpy/lib/_arraysetops_impl.py
+@@ -909,14 +909,53 @@ def _isin(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
+             "Please select 'sort' or None for kind."
+         )
+ 
+-    # Check if one of the arrays may contain arbitrary objects
+-    contains_object = ar1.dtype.hasobject or ar2.dtype.hasobject
++    string_dtype = None
++    if (ar1.dtype.kind == "T" or ar2.dtype.kind == "T") and (
++            ar1.dtype.kind in "TU" and ar2.dtype.kind in "TU"):
++        try:
++            # promote to the result dtype so we can use the fast hashing path
++            string_dtype = np.result_type(ar1, ar2)
++        except TypeError:
++            # fall back to slow sorting path with e.g. ar1.na_object == None
++            # and ar2.na_object == np.nan
++            pass
+ 
+-    # This code is run when
+-    # a) the first condition is true, making the code significantly faster
+-    # b) the second condition is true (i.e. `ar1` or `ar2` may contain
+-    #    arbitrary objects), since then sorting is not guaranteed to work
+-    if len(ar2) < 10 * len(ar1) ** 0.145 or contains_object:
++    # Check if one of the arrays may contain arbitrary objects
++    contains_object = (ar1.dtype.hasobject or ar2.dtype.hasobject) and (
++        string_dtype is None)
++
++    scalar_comparisons_are_faster = len(ar2) < 10 * len(ar1) ** 0.145
++    result = None
++    # Remove non-NaN missing values before sorting. Non-string sentinels
++    # cannot be ordered with strings. String sentinels are sortable, but
++    # filtering is faster when missing values are common and adds only a
++    # small overhead otherwise.
++    if (not scalar_comparisons_are_faster and string_dtype is not None and
++            string_dtype._has_na and not string_dtype._has_nan_na):
++        na = np.asarray(string_dtype.na_object, dtype=string_dtype)
++        missing1, missing2 = ar1 == na, ar2 == na
++        has_missing2 = missing2.any()
++        if missing1.any():
++            result = np.full(
++                ar1.shape, has_missing2 != invert, dtype=bool)
++            valid1 = ~missing1
++            ar1 = ar1[valid1]
++        if has_missing2:
++            ar2 = ar2[~missing2]
++        # Filtering can make scalar comparisons cheaper than sorting.
++        scalar_comparisons_are_faster = len(ar2) < 10 * len(ar1) ** 0.145
++
++    # Use direct comparisons for few candidates or arbitrary objects, which
++    # cannot be sorted reliably.
++    if scalar_comparisons_are_faster or contains_object:
++        if string_dtype is not None:
++            # StringDType scalars are str or na_object, so ensure iteration
++            # always produces arrays this could be deleted if StringDType ever
++            # grew a NumPy scalar type
++            ar2 = ar2.reshape(-1, 1)
++            if ar2.dtype.kind == "T" and ar2.dtype._has_nan_na:
++                na_object = ar2.dtype.na_object
++                ar2 = (a for a in ar2 if a[0] is not na_object)
+         if invert:
+             mask = np.ones(len(ar1), dtype=bool)
+             for a in ar2:
+@@ -925,9 +964,16 @@ def _isin(ar1, ar2, assume_unique=False, invert=False, *, kind=None):
+             mask = np.zeros(len(ar1), dtype=bool)
+             for a in ar2:
+                 mask |= (ar1 == a)
+-        return mask
++    else:
++        mask = _isin_sorting(ar1, ar2, assume_unique, invert)
++
++    if result is not None:
++        result[valid1] = mask
++        return result
++    return mask
++
+ 
+-    # Otherwise use sorting
++def _isin_sorting(ar1, ar2, assume_unique, invert):
+     if not assume_unique:
+         ar1, rev_idx = np.unique(ar1, return_inverse=True)
+         ar2 = np.unique(ar2)
+diff --git a/numpy/testing/_private/utils.py b/numpy/testing/_private/utils.py
+index 709fe456691f..48cdf9af43c9 100644
+--- a/numpy/testing/_private/utils.py
++++ b/numpy/testing/_private/utils.py
+@@ -890,7 +890,7 @@ def assert_same_inf_values(x, y, infs_mask):
+ 
+         elif isvstring(x) and isvstring(y):
+             dt = x.dtype
+-            if equal_nan and dt == y.dtype and hasattr(dt, 'na_object'):
++            if equal_nan and dt == y.dtype and dt._has_nan_na:
+                 # Let the dtype determine which values are NaN-like.
+                 flagged = func_assert_same_pos(
+                     x, y, func=isnan, hasval=dt.na_object)

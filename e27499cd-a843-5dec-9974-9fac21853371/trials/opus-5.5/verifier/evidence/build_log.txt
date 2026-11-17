@@ -1,0 +1,15 @@
+{"ok": true, "seconds": 10.4}
+
+Processing /opt/harness/work/graded
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: scikit-learn
+  Building wheel for scikit-learn (pyproject.toml): started
+  Building wheel for scikit-learn (pyproject.toml): finished with status 'done'
+  Created wheel for scikit-learn: filename=scikit_learn-1.10.dev0-cp313-cp313-linux_x86_64.whl size=9096702 sha256=43c1453de487f975ef71813c6987bd2a924d8c3b8fad61f6fc84ebea6669a504
+  Stored in directory: /opt/harness/scratch/tmpsyd2uc8r/tmp/pip-ephem-wheel-cache-u4cw0et3/wheels/bc/16/e9/afc3aee1d9bcf1a54d791fd78be60ac9709ba9c9aef73ef18f
+Successfully built scikit-learn
+Installing collected packages: scikit-learn
+Successfully installed scikit-learn-1.10.dev0
+
+--- stderr ---

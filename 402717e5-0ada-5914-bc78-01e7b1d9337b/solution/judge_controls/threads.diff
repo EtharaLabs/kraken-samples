@@ -1,0 +1,30 @@
+--- a/statsmodels/tsa/stattools/_stattools.py
++++ b/statsmodels/tsa/stattools/_stattools.py
+@@ -4312,8 +4312,25 @@
+                         f"  cols (exc intercept) = {exog.shape[1] - 1}  rank = {o.df_model}"
+                     )
+                 stats[bp] = o.tvalues[basecols - 1]
+-            else:
+-                stats[bp] = self._quick_ols(endog[baselags:], exog)[basecols - 1]
++                break
++        from concurrent.futures import ThreadPoolExecutor
++
++        def _chunk(bps):
++            local = exog.copy()
++            out = []
++            for p in bps:
++                local = self._update_regression_exog(
++                    local, regression, p, nobs, c_const, t_const, basecols, baselags
++                )
++                out.append((p, self._quick_ols(endog[baselags:], local)[basecols - 1]))
++            return out
++
++        rest = list(range(start_period + 2, end_period + 1))
++        chunks = [rest[i::4] for i in range(4)]
++        with ThreadPoolExecutor(max_workers=4) as pool:
++            for part in pool.map(_chunk, chunks):
++                for p, value in part:
++                    stats[p] = value
+         # return best seen
+         zastat = np.min(stats)
+         bpidx = np.argmin(stats) - 1

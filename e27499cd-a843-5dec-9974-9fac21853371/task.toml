@@ -1,0 +1,98 @@
+schema_version = "1.4"
+reward_type = "bounded_continuous"
+
+# D1: the modified scikit-learn working tree. Harbor snapshots it out of the agent
+# container and re-materializes it at the same path in the separate verifier, which
+# overlays its library changes on a warm base tree and rebuilds it from source.
+artifacts = [
+  { source = "/app/scikit-learn", exclude = [".git", "__pycache__", "*.pyc", "*.so", ".pytest_cache", ".hypothesis", "build", ".mesonpy-*", "*.egg-info", ".mypy_cache", ".ruff_cache"] },
+]
+
+[task]
+name = "ethara/e27499cd-a843-5dec-9974-9fac21853371"
+version = "0.1.0"
+description = """
+Make scikit-learn's coordinate descent regularization paths (enet_path, lasso_path, ElasticNetCV, LassoCV, MultiTaskElasticNetCV, MultiTaskLassoCV) faster without changing any result. Continuous reward over three hidden, seed-randomized workload families, timed against a fast reference implementation:
+Family speed score S_f for f in F1, F2, F3: over that family's hidden cases, the
+median of clamp(ln(T_base / T_sub) / ln(T_base / T_ref), 0, 1), where T is the median
+of the repeated timings of the case, each repetition in a fresh process. A speedup
+over base below the calibrated noise band counts as no speedup (0), and a submission
+within the noise band of the reference counts as the reference (1). S_f is 0 when any
+case of f is not equivalent to the base output or the submission's run fails.
+Judged score J: the weighted mean of the judged items of tests/judge.toml, 0 for an
+empty diff.
+With no judge configured: reward = (0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3) / 0.85.
+With a judge configured:  reward = 0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3 + 0.15 J.
+A red line, a failed build or a failed covering test sets the reward to 0. No term
+multiplies J by any speed score.
+"""
+authors = [{ name = "ankit.ethara", email = "ankit.ethara@ethara.ai" }]
+keywords = ["python", "cython", "scikit-learn", "coordinate-descent", "elastic-net", "lasso", "performance-optimization", "long-horizon", "continuous-reward"]
+
+[metadata]
+null_floor = 0.0
+discrimination_weight = 0.5
+platforms = ["linux/amd64", "linux/arm64"]
+archetype = "perf-optimization-repo"
+category = "long-horizon"
+tags = ["bounded-continuous"]
+
+[metadata.contamination]
+public_source = "https://github.com/scikit-learn/scikit-learn/pull/34572"
+public_since = "2026-07-29"
+note = "The task is built from a public upstream pull request (BSD-3-Clause), merged 2026-07-29T08:42:06Z as 6f8b95aa2234102acc3804fc8c7a3e6bd0506bfb. Models trained on data after 2026-07-29 may have seen that fix; treat scores from such models as possibly memorized. The graded reference is not that pull request but a faster original implementation written for this task (solution/reference.patch): reproducing the public fix alone does not reach the reference speed, so memorization of the fix does not saturate the reward."
+
+[metadata.task_spec]
+editable_surface = "/app/scikit-learn/sklearn/ (library source; tests directories, conftest.py, sklearn/utils/_testing.py, sklearn/utils/estimator_checks.py and the top-level build and test settings are protected)"
+output_location = "the edited /app/scikit-learn tree, snapshotted in place for the separate verifier, which overlays its sklearn/ changes on the base source and rebuilds"
+equivalence = "every returned path array or fitted attribute (coefficients, intercepts, dual gaps, cross-validation error paths) within max|a - b| <= 1e-6 * max|a|; numbers of iterations equal; alpha grid and the selected alpha and l1_ratio equal within a relative 1e-9; public sklearn.linear_model signatures unchanged"
+units = "wall-clock seconds of one public entry-point call per hidden case (after a warm-up on a tiny problem), median of 3 fresh-process repetitions rotated across base, reference and submission builds, single-threaded BLAS and OpenMP"
+families = "F1 dense solver: enet_path / lasso_path with precompute=False and ElasticNetCV / LassoCV with precompute=False on tall dense X (0.25); F2 multi-task solver: MultiTaskElasticNetCV / MultiTaskLassoCV on sparse X, with and without an intercept, with and without sample weights (0.40); F3 single-output sparse and Gram solvers: ElasticNetCV / LassoCV on sparse X, with and without an intercept, with and without sample weights, and enet_path with a precomputed Gram matrix on tall dense X (0.20)"
+reference = "solution/reference.patch (laid over the base tree as tests/expert/): path solvers in _cd_fast.pyx that fit a whole alpha path in one call for sparse single-output, sparse multi-task and Gram inputs, keeping residuals, X.T @ R and Q @ w across alphas, folding the sparse centering into a scalar offset and computing dual gaps lazily. With precompute=False on dense X with more samples than features and more than one alpha, it runs the same coordinate descent on rows of X.T @ X filled on demand inside the path solver instead of on X: the user's precompute=False is not turned into a Gram matrix argument and results stay within the stated tolerances, but the F1 reference speed depends on this internal choice."
+noise_band = "per family, the largest ln spread of the base build's own repeated timings, clamped to [0.05, 0.15]; a case whose reference gain is not above twice the band is not scored"
+reward = "With no judge configured: (0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3) / 0.85. With a judge configured: 0.25 S_F1 + 0.40 S_F2 + 0.20 S_F3 + 0.15 J. S_f = median over the family's cases of clamp(ln(T_base/T_sub)/ln(T_base/T_ref), 0, 1) with the noise band rules; S_f = 0 if any case of f is not equivalent or the submission's run fails; reward 0 on a red line, a failed build or a failed covering test."
+covering_tests = "every test of sklearn/linear_model/tests that passes on the base build, and every test of test_coordinate_descent.py and test_sparse_coordinate_descent.py (base commit versions)"
+judge = "optional; 5 binary craft items in tests/judge.toml through Harbor Reward Kit, enabled only when OPENAI_API_KEY is set (REWARDKIT_JUDGE defaults to openai/gpt-5.6-sol; OpenAI judges only); without a key, with a non-OpenAI judge or when the judge call fails, the reward is compiled-only"
+tolerance_disclosure = "workload sizes and seeds are hidden from the agent by design; the instruction states every graded obligation, the equivalence tolerances and the reward formula"
+
+[agent]
+timeout_sec = 7200.0
+network_mode = "no-network"
+user = "1000:1000"
+
+[verifier]
+timeout_sec = 5400.0
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+environment_mode = "separate"
+# The harness compiles the submission as a builder uid and demotes every run of
+# submission code to a restricted runner uid with a fresh HOME and TMPDIR and no write
+# access to the harness or the measurement record, so it starts as root.
+user = "root"
+
+# Optional judge: Harbor Reward Kit on the tester's own OpenAI API key. With OPENAI_API_KEY
+# unset the reward is the compiled score and the verifier calls nothing over the network.
+# The judge must be an OpenAI model (the tasks were authored with Claude); any other judge,
+# or a failed judge call, keeps the compiled reward.
+[verifier.env]
+REWARDKIT_JUDGE = "${REWARDKIT_JUDGE:-openai/gpt-5.6-sol}"
+OPENAI_API_KEY = "${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+LITELLM_LOCAL_MODEL_COST_MAP = "True"
+
+[verifier.environment]
+network_mode = "allowlist"
+allowed_hosts = ["api.openai.com"]
+build_timeout_sec = 5400.0
+cpus = 2
+memory_mb = 8192
+storage_mb = 20480
+gpus = 0
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 3600.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 20480
+gpus = 0

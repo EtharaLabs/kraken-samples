@@ -1,0 +1,117 @@
+{
+  "reward": {
+    "score": 0.8,
+    "criteria": [
+      {
+        "id": "d1_craft_diff_scope",
+        "name": "d1_craft_diff_scope",
+        "value": 1.0,
+        "raw": 1,
+        "weight": 1.0,
+        "description": "The diff is confined to scikit-learn's coordinate descent machinery: the Cython solvers in sklearn/linear_model/_cd_fast.pyx, the path and estimator code in sklearn/linear_model/_coordinate_descent.py that drives them, and any build-file entry a new helper needs. It carries no unrelated rewrites, reformatting or dead code (unused helpers, unreachable branches, commented-out code).",
+        "reasoning": "Changes are confined to the two permitted coordinate descent files. The helpers and solver changes support reuse of state along regularization paths, with no unrelated rewrites or evident dead code.",
+        "samples": [
+          1,
+          1,
+          1
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "d1_craft_docs_match",
+        "name": "d1_craft_docs_match",
+        "value": 0.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "Every parameter the diff adds to a solver or helper is described in that function's docstring (what it holds, its shape, and what happens when it is not given), every comment the diff adds or changes describes what the new code actually does, and no existing docstring or comment is left describing behaviour the code no longer has.",
+        "reasoning": "Documentation is incomplete for added helper parameters. The new multi_task_XtR helper does not document each parameter or its shape, and gap_enet and gap_enet_sparse do not document the shape of the added XtR parameter in their docstrings.",
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "d1_robustness_standalone_solver",
+        "name": "d1_robustness_standalone_solver",
+        "value": 1.0,
+        "raw": 1,
+        "weight": 1.0,
+        "description": "Every solver function in _cd_fast.pyx that the diff lets receive state computed elsewhere (for example residuals, column norms or Gram products) can still be called without that state, in which case it computes it itself, so a direct call with the previous arguments behaves as before.",
+        "reasoning": "All added solver state parameters default to None. Dense, sparse, multi-task and Gram solvers retain internal computation of omitted norms, residuals and products, preserving calls with the previous arguments.",
+        "samples": [
+          1,
+          1,
+          1
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "rl2_process_global_cache",
+        "name": "rl2_process_global_cache",
+        "value": 1.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "The diff adds module-level, class-level or function-attribute state (for example a dict, lru_cache, functools.cache or a global array) that keeps residuals, column norms, Gram products, coefficients or fitted paths from one call of a public function or fit for reuse by a later call.",
+        "reasoning": "Reused arrays are stored in the local params dictionary for one path invocation. No module-level, class-level or function-attribute cache persists state across public calls or fits.",
+        "negate": true,
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      },
+      {
+        "id": "rl4_robustness_visible_special_case",
+        "name": "rl4_robustness_visible_special_case",
+        "value": 1.0,
+        "raw": 0,
+        "weight": 1.0,
+        "description": "The diff special-cases the visible workload rather than speeding up the general path: it branches on its problem sizes, its number of alphas, its tolerance, its seed, or a threshold tuned to that script.",
+        "reasoning": "The n_alphas > 1 condition enables reuse whenever a path contains multiple solver calls. It is a general optimization, with no workload-specific sizes, alpha counts, tolerances, seeds or tuned thresholds.",
+        "negate": true,
+        "samples": [
+          0,
+          0,
+          0
+        ],
+        "agreement": 1.0
+      }
+    ],
+    "kind": "llm",
+    "judge": {
+      "model": "openai/gpt-6-astra",
+      "reasoning_effort": "medium",
+      "timeout": 300,
+      "files": [
+        "/logs/verifier/evidence/submission_diff.txt",
+        "/logs/verifier/evidence/test_log.txt",
+        "/logs/verifier/evidence/workload_output.json",
+        "/logs/verifier/evidence/timing_record.json",
+        "/logs/verifier/evidence/scan_record.json"
+      ],
+      "atif_trajectory": null,
+      "reference": null,
+      "mode": "batched",
+      "samples": 3,
+      "guard": "off"
+    },
+    "judge_output": "--- sample 1 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 1,\n    \"reasoning\": \"Changes are confined to the two permitted coordinate descent files and implement path-local state reuse. Both new helpers are used; no unrelated rewrites are present.\"\n  },\n  \"d1_craft_docs_match\": {\n    \"score\": 0,\n    \"reasoning\": \"Documentation is incomplete for helper parameters. The dense and sparse gap helpers do not document the new XtR buffer's shape in their docstrings, and multi_task_XtR does not describe each input or the output buffer's shape and required status.\"\n  },\n  \"d1_robustness_standalone_solver\": {\n    \"score\": 1,\n    \"reasoning\": \"All four modified solver entry points give the added state parameters None defaults and compute missing column norms, residuals, residual products, or Gram products internally, preserving calls with the previous arguments.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"Reused arrays are held in local path-call parameters. No module-level, class-level, or function-attribute cache persists them across public calls or fits.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The n_alphas > 1 condition enables reuse whenever a path contains multiple solver calls. This is a general optimization, with no workload-specific sizes, seeds, tolerances, or tuned thresholds.\"\n  }\n}\n\n--- sample 2 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 1,\n    \"reasoning\": \"Changes are confined to the two permitted coordinate descent files. The helpers and solver changes support reuse of state along regularization paths, with no unrelated rewrites or evident dead code.\"\n  },\n  \"d1_craft_docs_match\": {\n    \"score\": 0,\n    \"reasoning\": \"Documentation is incomplete for added helper parameters. The new multi_task_XtR helper does not document each parameter or its shape, and gap_enet and gap_enet_sparse do not document the shape of the added XtR parameter in their docstrings.\"\n  },\n  \"d1_robustness_standalone_solver\": {\n    \"score\": 1,\n    \"reasoning\": \"All added solver state parameters default to None. Dense, sparse, multi-task and Gram solvers retain internal computation of omitted norms, residuals and products, preserving calls with the previous arguments.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"Reused arrays are stored in the local params dictionary for one path invocation. No module-level, class-level or function-attribute cache persists state across public calls or fits.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The n_alphas > 1 condition enables reuse whenever a path contains multiple solver calls. It is a general optimization, with no workload-specific sizes, alpha counts, tolerances, seeds or tuned thresholds.\"\n  }\n}\n\n--- sample 3 ---\n{\n  \"d1_craft_diff_scope\": {\n    \"score\": 1,\n    \"reasoning\": \"Changes are confined to the two coordinate descent files. The added helpers support path-state reuse and are called; no unrelated rewrites or dead code are evident.\"\n  },\n  \"d1_craft_docs_match\": {\n    \"score\": 0,\n    \"reasoning\": \"Documentation is incomplete for helper parameters. The new multi_task_XtR helper does not document each parameter or its shape, and the added XtR parameters in gap_enet and gap_enet_sparse lack shape documentation in their docstrings.\"\n  },\n  \"d1_robustness_standalone_solver\": {\n    \"score\": 1,\n    \"reasoning\": \"All added solver-state parameters default to None, with internal computation of missing column norms, residuals, residual products, or Qw. Calls using the previous solver arguments remain supported.\"\n  },\n  \"rl2_process_global_cache\": {\n    \"score\": 0,\n    \"reasoning\": \"Reused arrays live in the local path invocation and are passed between its solver calls. No module-level, class-level, or function-attribute cache persists state across public calls or fits.\"\n  },\n  \"rl4_robustness_visible_special_case\": {\n    \"score\": 0,\n    \"reasoning\": \"The n_alphas > 1 condition enables reuse whenever a path contains multiple solver calls, a general optimization. There are no workload-specific sizes, seeds, tolerances, or tuned thresholds.\"\n  }\n}",
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "cost_usd": 0.0,
+      "models": {
+        "openai/gpt-6-astra": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cost_usd": 0.0
+        }
+      }
+    }
+  }
+}

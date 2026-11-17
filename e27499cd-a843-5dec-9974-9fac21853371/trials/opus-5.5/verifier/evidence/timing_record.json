@@ -1,0 +1,164 @@
+{
+ "F1": {
+  "cases": [
+   {
+    "base_median": 0.2628569270018488,
+    "expert_median": 0.020256135001545772,
+    "kind": "enet_path_dense",
+    "patch_median": 0.1418513550015632
+   },
+   {
+    "base_median": 0.41147014299349394,
+    "expert_median": 0.03435156699561048,
+    "kind": "enetcv_dense",
+    "patch_median": 0.1662585270096315
+   },
+   {
+    "base_median": 0.33468086599896196,
+    "expert_median": 0.02141422699787654,
+    "kind": "lasso_path_dense",
+    "patch_median": 0.07393404300091788
+   },
+   {
+    "base_median": 0.2613924350007437,
+    "expert_median": 0.02508067099552136,
+    "kind": "enetcv_dense",
+    "patch_median": 0.109557952004252
+   },
+   {
+    "base_median": 0.26369606899970677,
+    "expert_median": 0.014830023996182717,
+    "kind": "enet_path_dense",
+    "patch_median": 0.12498980799864512
+   },
+   {
+    "base_median": 0.2449861180066364,
+    "expert_median": 0.03651739998895209,
+    "kind": "lassocv_dense",
+    "patch_median": 0.063205113998265
+   },
+   {
+    "base_median": 0.36965771499671973,
+    "expert_median": 0.028779888001736253,
+    "kind": "enetcv_dense",
+    "patch_median": 0.16198139799234923
+   },
+   {
+    "base_median": 0.14732991500932258,
+    "expert_median": 0.00495473800401669,
+    "kind": "enet_path_dense",
+    "patch_median": 0.0637294159969315
+   }
+  ],
+  "noise_band": 0.0525,
+  "seed": 192713823
+ },
+ "F2": {
+  "cases": [
+   {
+    "base_median": 1.2800103909976315,
+    "expert_median": 0.09838077500171494,
+    "kind": "mtenetcv_sparse",
+    "patch_median": 0.2102473070117412
+   },
+   {
+    "base_median": 1.9890293130010832,
+    "expert_median": 1.319729811992147,
+    "kind": "mtlassocv_sparse_noint_sw",
+    "patch_median": 1.8456065370119177
+   },
+   {
+    "base_median": 1.553571443000692,
+    "expert_median": 0.08608617499703541,
+    "kind": "mtenetcv_sparse_sw",
+    "patch_median": 0.1761111020023236
+   },
+   {
+    "base_median": 2.7201770760002546,
+    "expert_median": 1.5245124119974207,
+    "kind": "mtenetcv_sparse_noint",
+    "patch_median": 2.5446905470016645
+   },
+   {
+    "base_median": 2.061845200994867,
+    "expert_median": 0.08664768400194589,
+    "kind": "mtlassocv_sparse_sw",
+    "patch_median": 0.19217254799150396
+   },
+   {
+    "base_median": 0.9482222740043653,
+    "expert_median": 0.533836574992165,
+    "kind": "mtenetcv_sparse_noint_sw",
+    "patch_median": 0.7833417640067637
+   },
+   {
+    "base_median": 0.9923293559986632,
+    "expert_median": 0.1187507069989806,
+    "kind": "mtenetcv_sparse",
+    "patch_median": 0.23924686400278006
+   },
+   {
+    "base_median": 1.1582501709926873,
+    "expert_median": 0.5743249350052793,
+    "kind": "mtlassocv_sparse_noint",
+    "patch_median": 0.960870672002784
+   }
+  ],
+  "noise_band": 0.05,
+  "seed": 191499615
+ },
+ "F3": {
+  "cases": [
+   {
+    "base_median": 1.5545976309949765,
+    "expert_median": 0.3591190619918052,
+    "kind": "enetcv_sparse",
+    "patch_median": 0.6398478340124711
+   },
+   {
+    "base_median": 5.228526200997294,
+    "expert_median": 2.2550452159921406,
+    "kind": "lassocv_sparse_noint_sw",
+    "patch_median": 4.515233881989843
+   },
+   {
+    "base_median": 0.027768318992457353,
+    "expert_median": 0.007601043005706742,
+    "kind": "enet_path_gram",
+    "patch_median": 0.008843434989103116
+   },
+   {
+    "base_median": 3.638902794002206,
+    "expert_median": 1.8581573959963862,
+    "kind": "enetcv_sparse_noint",
+    "patch_median": 3.2442052789992886
+   },
+   {
+    "base_median": 1.297348341991892,
+    "expert_median": 0.18490890000248328,
+    "kind": "lassocv_sparse_sw",
+    "patch_median": 0.31297085399273783
+   },
+   {
+    "base_median": 2.0716835349885514,
+    "expert_median": 0.9339865510119125,
+    "kind": "enetcv_sparse_noint_sw",
+    "patch_median": 1.2616977900033817
+   },
+   {
+    "base_median": 0.9658692999946652,
+    "expert_median": 0.1359537719981745,
+    "kind": "lassocv_sparse",
+    "patch_median": 0.22746581700630486
+   },
+   {
+    "base_median": 1.429044270000304,
+    "expert_median": 0.5581476820079843,
+    "kind": "lassocv_sparse_noint",
+    "patch_median": 0.885751206005807
+   }
+  ],
+  "noise_band": 0.05,
+  "seed": 380513658
+ }
+}

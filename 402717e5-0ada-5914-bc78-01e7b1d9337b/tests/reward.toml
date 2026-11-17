@@ -1,0 +1,39 @@
+[scoring.test_output]
+aggregation = "weighted-mean"
+
+[scoring.diag_correctness]
+aggregation = "weighted-mean"
+
+[scoring.diag_speedup]
+aggregation = "weighted-mean"
+
+[scoring.diag_noise]
+aggregation = "weighted-mean"
+
+[scoring.diag_stage]
+aggregation = "weighted-mean"
+
+[[reward]]
+name = "reward"
+aggregation = "weighted-mean"
+weights = { test_output = 70.0, diag_correctness = 0.0, diag_speedup = 0.0, diag_noise = 0.0, diag_stage = 0.0 }
+
+[[reward]]
+name = "correctness"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, diag_correctness = 1.0, diag_speedup = 0.0, diag_noise = 0.0, diag_stage = 0.0 }
+
+[[reward]]
+name = "geomean_speedup_ratio"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, diag_correctness = 0.0, diag_speedup = 1.0, diag_noise = 0.0, diag_stage = 0.0 }
+
+[[reward]]
+name = "noise_band"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, diag_correctness = 0.0, diag_speedup = 0.0, diag_noise = 1.0, diag_stage = 0.0 }
+
+[[reward]]
+name = "failure_stage"
+aggregation = "weighted-mean"
+weights = { test_output = 0.0, diag_correctness = 0.0, diag_speedup = 0.0, diag_noise = 0.0, diag_stage = 1.0 }

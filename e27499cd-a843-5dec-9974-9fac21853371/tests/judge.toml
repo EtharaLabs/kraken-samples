@@ -1,0 +1,86 @@
+# Judged craft items. Read only by the separate verifier, and only when the run host
+# configures a judge. Each item names the residue no deterministic check over the
+# evidence decides. Every requirement here is stated in instruction.md.
+
+[judge]
+files = ["/logs/verifier/evidence/submission_diff.txt", "/logs/verifier/evidence/test_log.txt", "/logs/verifier/evidence/workload_output.json", "/logs/verifier/evidence/timing_record.json", "/logs/verifier/evidence/scan_record.json"]
+mode = "batched"
+samples = 3
+
+[scoring]
+aggregation = "weighted-mean"
+
+[[criterion]]
+id = "d1_craft_diff_scope"
+name = "d1_craft_diff_scope"
+description = "The diff is confined to scikit-learn's coordinate descent machinery: the Cython solvers in sklearn/linear_model/_cd_fast.pyx, the path and estimator code in sklearn/linear_model/_coordinate_descent.py that drives them, and any build-file entry a new helper needs. It carries no unrelated rewrites, reformatting or dead code (unused helpers, unreachable branches, commented-out code)."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "craft"
+evidence = "submission_diff"
+residue = "relatedness of a hunk to the coordinate descent path, and whether added code is reachable, are semantic judgments"
+
+[[criterion]]
+id = "d1_craft_docs_match"
+name = "d1_craft_docs_match"
+description = "Every parameter the diff adds to a solver or helper is described in that function's docstring (what it holds, its shape, and what happens when it is not given), every comment the diff adds or changes describes what the new code actually does, and no existing docstring or comment is left describing behaviour the code no longer has."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "craft"
+evidence = "submission_diff"
+residue = "whether prose matches the code it describes needs reading both together"
+
+[[criterion]]
+id = "d1_robustness_standalone_solver"
+name = "d1_robustness_standalone_solver"
+description = "Every solver function in _cd_fast.pyx that the diff lets receive state computed elsewhere (for example residuals, column norms or Gram products) can still be called without that state, in which case it computes it itself, so a direct call with the previous arguments behaves as before."
+type = "binary"
+weight = 1
+negate = false
+
+[criterion.annotations]
+mode = "judged"
+obligation = "D1"
+dimension = "robustness"
+evidence = "submission_diff"
+residue = "whether every new input has a self-computing default needs reading each solver's signature and prologue"
+
+[[criterion]]
+id = "rl2_process_global_cache"
+name = "rl2_process_global_cache"
+description = "The diff adds module-level, class-level or function-attribute state (for example a dict, lru_cache, functools.cache or a global array) that keeps residuals, column norms, Gram products, coefficients or fitted paths from one call of a public function or fit for reuse by a later call."
+type = "binary"
+weight = 1
+negate = true
+
+[criterion.annotations]
+mode = "judged"
+obligation = "RL2"
+dimension = "process"
+evidence = "submission_diff"
+residue = "whether a container outlives one call depends on its scope and clearing, which a token scan cannot decide"
+
+[[criterion]]
+id = "rl4_robustness_visible_special_case"
+name = "rl4_robustness_visible_special_case"
+description = "The diff special-cases the visible workload rather than speeding up the general path: it branches on its problem sizes, its number of alphas, its tolerance, its seed, or a threshold tuned to that script."
+type = "binary"
+weight = 1
+negate = true
+
+[criterion.annotations]
+mode = "judged"
+obligation = "RL4"
+dimension = "robustness"
+evidence = "submission_diff"
+residue = "special-casing by structure rather than by literal carries no fixed token; the literal scan covers only the visible seed"
