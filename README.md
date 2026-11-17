@@ -4,7 +4,7 @@
 
 <p align="center"><b>Five sample tasks from Kraken, a Harbor benchmark of performance work on real scientific Python libraries.</b></p>
 
-<p align="center"><sub><a href="#abstract">Abstract</a> | <a href="#summary">Summary</a> | <a href="#tasks">Tasks</a> | <a href="#trials">Trials</a> | <a href="#dataset-structure">Dataset structure</a> | <a href="#reproduction">Reproduction</a> | <a href="#contact">Contact</a></sub></p>
+<p align="center"><sub><a href="#abstract">Abstract</a> | <a href="#summary">Summary</a> | <a href="#tasks">Tasks</a> | <a href="#trials">Trials</a> | <a href="#dataset-structure">Dataset structure</a> | <a href="#reproduction">Reproduction</a> | <a href="#cite">Cite</a> | <a href="#contact">Contact</a></sub></p>
 
 ## Abstract
 
@@ -81,8 +81,19 @@ Each task directory is a complete Harbor task: `task.toml` is the runner manifes
 harbor run -a claude-code -m anthropic/claude-opus-5-5
 ```
 
+## Cite
+
+```bibtex
+@misc{kraken2026,
+  title        = {Kraken: Repository-Level Performance Optimization Tasks},
+  author       = {{Ethara.AI}},
+  year         = {2026},
+  note         = {Grounded in SWE-fficiency (Ma et al., arXiv:2511.06090).}
+}
+```
+
 ## Contact
 
-Kraken is built by [Ethara.AI](https://github.com/Ethara-Ai).
+Kraken SWE-efficiency is built by [Ethara.AI](https://github.com/Ethara-Ai). For questions about the benchmark or dataset, contact [research@ethara.ai](mailto:research@ethara.ai).
 
 Copyright (c) 2026 Green Rider Technology LLP (Ethara AI). All rights reserved.
