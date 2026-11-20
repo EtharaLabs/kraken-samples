@@ -2,13 +2,13 @@
 
 # Kraken SWE-efficiency: Samples
 
-<p align="center"><b>Five sample tasks from Kraken, a Harbor benchmark of performance work on real scientific Python libraries.</b></p>
+<p align="center"><b>Five sample tasks from Kraken, a Harbor benchmark built on SWE-fficiency (arXiv:2511.06090) of performance work on real scientific Python libraries.</b></p>
 
 <p align="center"><sub><a href="#abstract">Abstract</a> | <a href="#summary">Summary</a> | <a href="#tasks">Tasks</a> | <a href="#trials">Trials</a> | <a href="#dataset-structure">Dataset structure</a> | <a href="#reproduction">Reproduction</a> | <a href="#cite">Cite</a> | <a href="#contact">Contact</a></sub></p>
 
 ## Abstract
 
-Kraken is a benchmark of software-efficiency tasks in [Harbor](https://www.harborframework.com/) format. Each task takes a real open-source scientific library at a pinned commit, points the agent at a slow code path through a visible workload script, and asks for a much faster implementation that returns the same results as the unmodified library.
+Kraken is a benchmark of software-efficiency tasks built on the [SWE-fficiency](https://arxiv.org/abs/2511.06090) benchmark (Ma et al., arXiv:2511.06090), in [Harbor](https://www.harborframework.com/) format. Each task takes a real open-source scientific library at a pinned commit, points the agent at a slow code path through a visible workload script, and asks for a much faster implementation that returns the same results as the unmodified library.
 
 Every task runs the agent in a container with no network and carries a reference solution and a verifier that runs in a separate container. The verifier rebuilds the submitted library, checks that every result matches the unmodified library, runs the repository's own tests, and times the submission against the base and reference implementations on seed-randomized inputs. The reward is continuous between 0 and 1.
 
